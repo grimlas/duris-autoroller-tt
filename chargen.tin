@@ -1,0 +1,1721 @@
+#NOP VSOF;
+
+#VAR DURIS_CFG_LOGS_PATH {.}
+#VAR DURIS_CFG_TINTIN_CHAR {#}
+
+
+#NOP /////////////////////////////////////////////////////////////////////////;
+#NOP /////////////////////////////////////////////////////////////////////////;
+#NOP /////////////////////////////////////////////////////////////////////////;
+
+
+#NOP : read in default configuration for character creation;
+#READ _chargen-cfg.tin
+#READ _chargen-roller-cfg.tin
+#READ _chargen-roller-cfg-user.tin
+
+
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>;
+#NOP
+#NOP                  S E S S I O N   &   L O G G I N G
+#NOP
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>;
+
+#VAR CCharGen_LogTimestamp {}
+#VAR CCharGen_CurrentTimestamp {}
+#VAR CCharGen_RollEndTimestamp {}
+#VAR CCharGen_RollEndEpochTimestamp {}
+
+#VAR CCharGen_RollComplete {0}
+
+
+#NOP --------------------------------------------------------------------------
+#NOP --------------------------------------------------------------------------
+#CLASS {ccharprerollclass} {open}
+#VAR CCharGen_CharName {}
+#VAR CCharGen_CharPassword {}
+#VAR CCharGen_IsNewbie {}
+#VAR CCharGen_CharRaceChoice {}
+#VAR CCharGen_CharGenderChoice {}
+#VAR CCharGen_CharIsHardcoreChoice {}
+#VAR CCharGen_CharClassChoice {}
+#VAR CCharGen_CharAlignmentChoice {}
+#VAR CCharGen_CharStartTownChoice {}
+#VAR CCharGen_CharPreRollCreationDone {0}
+#VAR CCharGen_LogFile {}
+#VAR CCharGen_StatsFile {}
+#VAR CCharGen_RollStartTimestamp {}
+#VAR CCharGen_RollStartEpochTimestamp {}
+#VAR CCharGen_EnableMudLogging {1}
+#VAR CCharGen_EnableStatsLogging {1}
+#CLASS {ccharprerollclass} {close}
+#NOP --------------------------------------------------------------------------
+#NOP --------------------------------------------------------------------------
+
+#ALIAS {CCharGen_AliasFunc_LogInfo}
+{
+	#FORMAT {CCharGen_CurrentTimestamp} {%t}{%Y%m%d-%H%M:%S};
+	#SHOWME <020>[$CCharGen_CurrentTimestamp] INFO: %0;
+}
+
+#ALIAS {CCharGen_AliasFunc_LogStatsDemark}
+{
+	#IF {$CCharGen_EnableStatsLogging == 1}
+	{
+		#FORMAT {CCharGen_CurrentTimestamp} {%t}{%Y%m%d-%H%M:%S};
+		#LINE {log} {$CCharGen_StatsFile} {<020>[$CCharGen_CurrentTimestamp] %0};
+	}
+}
+
+#ALIAS {CCharGen_AliasFunc_LogStats}
+{
+	#IF {$CCharGen_EnableStatsLogging == 1}
+	{
+		#FORMAT {CCharGen_CurrentTimestamp} {%t}{%Y%m%d-%H%M:%S};
+		#LINE {log} {$CCharGen_StatsFile} {<060>[$CCharGen_CurrentTimestamp] %0};
+	};
+}
+
+#ALIAS {enablelog %1}
+{
+	#IF {"%1" != "1" && "%1" != "0"}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tInvalid argument, should be <020>'1'(on) <110>or <020>'0'(off);
+	};
+	#ELSE
+	{
+		#VAR {CCharGen_EnableMudLogging} {%1};
+		#SHOWME <120>Setting enable mud logging flag: <020> $CCharGen_EnableMudLogging;
+	};
+}
+
+#ALIAS {enablestats %1}
+{
+	#IF {"%1" != "1" && "%1" != "0"}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tInvalid argument, should be <020>'1'(on) <110>or <020>'0'(off);
+	};
+	#ELSE
+	{
+		#VAR {CCharGen_EnableStatsLogging} {%1};
+		#SHOWME <120>Setting enable stats logging flag: <020> $CCharGen_EnableStatsLogging;
+	};
+}
+
+#NOP - configure a heuristic list for bonus assignments and swaps
+#NOP - arg1 : priority 1 to 9
+#NOP - arg2 : an attrib, valid values = {Str|Pow|Dex|Int|Agi|Wis|Con|Cha|Luc}
+#ALIAS {statcfg %1 %2}
+{
+	#IF {"%1" != "1" && "%1" != "2" && "%1" != "3" &&
+		 "%1" != "4" && "%1" != "5" && "%1" != "6" &&
+		 "%1" != "7" && "%1" != "8" && "%1" != "9"}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tFirst argument should range between 1 to 9;
+	};
+	#ELSE
+	{
+		#IF {"%2" != "Str" && "%2" != "Pow" && "%2" != "Int" &&
+			 "%2" != "Dex" && "%2" != "Agi" && "%2" != "Wis" &&
+			 "%2" != "Con" && "%2" != "Cha" && "%2" != "Luc"}
+		{
+			#SHOWME <110>ERROR:;
+			#SHOWME <110>\tSecond argument should take one of these values : {Str|Pow|Dex|Int|Agi|Wis|Con|Cha|Luc};
+		};
+		#ELSE
+		{
+			#VAR {_CCHARGEN_ROLLER_CFG_ROLL_ASSIGNMENT_HEURISTICS_DEFAULT[StatsPriorityList][%1]} {%2};
+			#SHOWME <120>Setting StatsPriorityList[%1]: <020> %2;
+		};
+	};
+}
+
+#NOP - configure a second heuristic value for bonus assignment
+#ALIAS {statcfg2 %1}
+{
+	#FORMAT {lStatWeight} {%d} {%1};
+	
+	#IF {$lStatWeight == 0}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tYou must enter a number from 1 to 4 for a heuristic value used to convert v.gd to excellents;
+	};
+	#ELSE
+	{
+		#IF {$lStatWeight >= 1 && $lStatWeight <= 4}
+		{
+			#VAR {_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC} {$lStatWeight};
+			#SHOWME <120>Setting heuristic value used to convert v.gd to excellents: <020> $_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC;
+		};
+		#ELSE
+		{
+			#SHOWME <110>ERROR:;
+			#SHOWME <110>\tYou must enter a number from 1 to 4 for a heuristic value used to convert v.gd to excellents;
+		};
+	};
+}
+
+#ALIAS {statweight %1}
+{
+	#FORMAT {lStatWeight} {%d} {%1};
+
+	#IF {$lStatWeight == 0}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tYou must enter a positive number for weight;
+	};
+	#ELSE
+	{
+		#IF {$lStatWeight < 7}
+		{
+			#SHOWME <010>WARN:;
+			#SHOWME <010>\tYour weight is really low, you probably will end up with a shit character (why don't you just do manual rolling?);
+		};
+		#ELSEIF {$lStatWeight < 10}
+		{
+			#SHOWME <020>INFO:;
+			#SHOWME <020>\tYour weight tends towards the low side, you probably will end up with either an average character or a decent character with some luck in an hour or two;
+		};
+		#ELSEIF {$lStatWeight < 13}
+		{
+			#SHOWME <020>INFO:;
+			#SHOWME <020>\tYour weight is more or less optimal, there is a good chance of ending up with a good-great character with 2 to 4 excellents (after bonus assignments) in 3-6(not guaranteed) hours;
+		};
+		#ELSEIF {$lStatWeight < 16}
+		{
+			#SHOWME <020>INFO:;
+			#SHOWME <020>\tYour weight tends towards the high side but still well within the realm of possibility, you can probably end up with a really strong character in 6-24(not guaranteed) hours;
+		};
+		#ELSE
+		{
+			#SHOWME <010>WARN:;
+			#SHOWME <010>\tYou are trying to roll a demi-godly to godly character. If you can't accomplish it in 2 days, it might be better to try the lottery;
+		}
+		
+		#VAR {_CCHARGEN_ROLLER_CFG_WEIGHT} {$lStatWeight};
+		#SHOWME <120>Setting Weight Target: <020> $_CCHARGEN_ROLLER_CFG_WEIGHT;
+	};
+}
+
+#ALIAS {statauto %1}
+{
+	#IF {"%1" != "1" && "%1" != "0"}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tInvalid argument, should be <020>'1'(auto) <110>or <020>'0'(non-auto);
+	};
+	#ELSE
+	{
+		#VAR {_CCHARGEN_ROLLER_CFG_AUTO_BONUS} {%1};
+		#SHOWME <120>Setting Autobonus flag: <020> $_CCHARGEN_ROLLER_CFG_AUTO_BONUS;
+	};
+}
+
+#ALIAS {showstatcfg}
+{
+	#SHOWME <120>Showing StatsPriorityList: <020> $_CCHARGEN_ROLLER_CFG_ROLL_ASSIGNMENT_HEURISTICS_DEFAULT[StatsPriorityList];
+	#SHOWME <120>Showing heuristic value used to convert v.gd to excellents: <020> $_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC;
+	#SHOWME <120>Showing Weight Target: <020> $_CCHARGEN_ROLLER_CFG_WEIGHT;
+	#SHOWME <120>Showing Autobonus flag: <020> $_CCHARGEN_ROLLER_CFG_AUTO_BONUS;
+}
+
+#ALIAS {duris}
+{
+	#NOP verify user roller configuration;
+	#VAR lCountE {0};
+	#VAR lLargestVal {4};
+	#VAR lError {0};
+	#MATH lFlagsNeeded
+	{
+		$_CCHARGEN_ROLLER_CFG_STR_BIT | 
+		$_CCHARGEN_ROLLER_CFG_POW_BIT |
+		$_CCHARGEN_ROLLER_CFG_DEX_BIT |
+		$_CCHARGEN_ROLLER_CFG_INT_BIT |
+		$_CCHARGEN_ROLLER_CFG_AGI_BIT |
+		$_CCHARGEN_ROLLER_CFG_WIS_BIT |
+		$_CCHARGEN_ROLLER_CFG_CON_BIT |
+		$_CCHARGEN_ROLLER_CFG_CHA_BIT |
+		$_CCHARGEN_ROLLER_CFG_LUC_BIT
+	};
+	#VAR lFlags {0};
+	
+	#FOREACH 
+		$_CCHARGEN_ROLLER_CFG_ROLL_ASSIGNMENT_HEURISTICS_DEFAULT[StatsPriorityList][%*]	{attrib}
+	{
+		#IF {"$attrib" == "Str"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_STR_BIT};
+		};
+		#ELSEIF {"$attrib" == "Pow"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_POW_BIT};
+		};
+		#ELSEIF {"$attrib" == "Dex"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_DEX_BIT};
+		};
+		#ELSEIF {"$attrib" == "Int"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_INT_BIT};
+		};
+		#ELSEIF {"$attrib" == "Agi"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_AGI_BIT};
+		};
+		#ELSEIF {"$attrib" == "Wis"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_WIS_BIT};
+		};
+		#ELSEIF {"$attrib" == "Con"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_CON_BIT};
+		};
+		#ELSEIF {"$attrib" == "Cha"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_CHA_BIT};
+		};
+		#ELSEIF {"$attrib" == "Luc"}
+		{
+			#MATH {lFlags} {$lFlags | $_CCHARGEN_ROLLER_CFG_LUC_BIT};
+		};
+	};
+	
+	#IF {$lFlags != $lFlagsNeeded}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tSomething is wrong with StatsPriorityList inside _CCHARGEN_ROLLER_CFG_ROLL_ASSIGNMENT_HEURISTICS_DEFAULT;
+		#SHOWME <110>\tYou should have ONE OF EACH attribute in the list;
+		#SHOWME <110>\tA valid configuration looks something like this: <020>{StatsPriorityList} {{1}{Dex}{2}{Con}{3}{Str}{4}{Agi}{5}{Luc}{6}{Pow}{7}{Int}{8}{Cha}{9}{Wis}};
+		#SHOWME <110>\tUse <020>'showstatcfg' <110>or examine _chargen-roller-cfg-user.tin to verify;
+		#MATH {lError} {$lError + 1};
+	};
+
+	#IF {"$_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC" != "1" &&
+	  	 "$_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC" != "2" &&
+	  	 "$_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC" != "3" &&
+	  	 "$_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC" != "4"}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tSomething is wrong with the 'v.gd to excl target heuristic value';
+		#SHOWME <110>\tA valid value is between 1 and 4 (inclusive);
+		#SHOWME <110>\tUse <020>'showstatcfg' <110>or examine _chargen-roller-cfg-user.tin to verify;
+		#MATH {lError} {$lError + 1};
+	};
+
+	#FORMAT {lStatWeight} {%d} {$_CCHARGEN_ROLLER_CFG_WEIGHT};
+	#IF {$lStatWeight == 0}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tSomething is wrong with the stat weight assigned;
+		#SHOWME <110>\tA valid value is a positive number;
+		#SHOWME <110>\tUse <020>'showstatcfg' <110>or examine _chargen-roller-cfg-user.tin to verify;
+		#MATH {lError} {$lError + 1};
+	};
+
+	#IF {"$_CCHARGEN_ROLLER_CFG_AUTO_BONUS" != "1" &&
+		 "$_CCHARGEN_ROLLER_CFG_AUTO_BONUS" != "0"}
+	{
+		#SHOWME <110>ERROR:;
+		#SHOWME <110>\tSomething is wrong with the auto bonus flag;
+		#SHOWME <110>\tA valid value is either '1'(auto) or '0'(auto);
+		#SHOWME <110>\tUse <020>'showstatcfg' <110>or examine _chargen-roller-cfg-user.tin to verify;
+		#MATH {lError} {$lError + 1};
+	};
+	
+	#IF {$lError == 0}
+	{
+		#CLASS {ccharprerollclass} {write} {$DURIS_CFG_LOGS_PATH/.tmp.tin};
+		#CLASS {ccharrollcfgclass} {write} {$DURIS_CFG_LOGS_PATH/.tmp2.tin};
+		#DELAY {1} {#SES duris durismud.com 7777;};
+	}
+}
+
+#EVENT {SESSION CONNECTED}
+{
+	#CONFIG {PACKET PATCH} {0.50};
+	#CONFIG {LOG}  {HTML};
+	#DELAY {1} {#SPLIT;};
+	
+	#CLASS {ccharprerollclass} {read} {$DURIS_CFG_LOGS_PATH/.tmp.tin};
+	#CLASS {ccharrollcfgclass} {read} {$DURIS_CFG_LOGS_PATH/.tmp2.tin};
+
+	#IF {$CCharGen_CharPreRollCreationDone == 0}
+	{
+		#IF {$CCharGen_EnableMudLogging == 1}
+		{		
+			#FORMAT CCharGen_LogTimestamp {%t} {%Y%m%d-%H%M%S};
+			#VAR {CCharGen_LogFile} {$DURIS_CFG_LOGS_PATH/log-$CCharGen_LogTimestamp-log.html};
+			
+			#LOG {a} {$CCharGen_LogFile};
+			CCharGen_AliasFunc_LogInfo LogFile created -> $CCharGen_LogFile;
+			CCharGen_AliasFunc_LogInfo Logging started at $CCharGen_LogTimestamp;
+		};
+	
+		#IF {$CCharGen_EnableStatsLogging == 1}
+		{
+			#VAR {CCharGen_StatsFile} {$DURIS_CFG_LOGS_PATH/stats-$CCharGen_LogTimestamp-stats.html};
+			CCharGen_AliasFunc_LogInfo StatsFile created -> $CCharGen_StatsFile;
+		};
+	};
+	#ELSE
+	{
+		#IF {$CCharGen_EnableMudLogging == 1}
+		{
+			#LOG {a} {$CCharGen_LogFile};
+		};
+
+		CCharGen_AliasFunc_LogInfo Resuming rolling after reconnection;
+	};
+	
+	showstatcfg;
+}
+
+#EVENT {SESSION DISCONNECTED}
+{
+	CCharGen_AliasFunc_LogInfo Session %0 disconnected;
+	#IF {$CCharGen_RollComplete == 0}
+	{
+		CCharGen_AliasFunc_LogInfo Try to reconnect after 3 minutes;
+		#DELAY {180} {#SES {%0} {%1} {%3};};
+	};
+	#ELSE
+	{
+		CCharGen_AliasFunc_LogInfo DC after rolling, just end session;
+		#END;
+	};
+}
+
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#NOP
+#NOP                     C H A R     S E L E C T I O N
+#NOP
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#VAR CCharGen_ScanRolledStats {0}
+#VAR CCharGen_RerollCount {0}
+#VAR CCharGen_RollerInvoked {}
+
+
+#ACTION {^By what name do you wish to be known? Type 'generate' to generate names.By what name do you wish to be known? Type
+'generate' to generate names.$}
+{
+	#VAR {CCharGen_RollerInvoked} {0};
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {$CCharGen_CharName};
+	};
+	#ELSE
+	{
+		#EVENT {RECEIVED INPUT}
+		{
+			#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+			{
+				#NOP : is a client command;
+			}
+			{
+				#VAR {CCharGen_CharName} {%%0};
+				#UNEVENT {RECEIVED INPUT};
+			}
+		}
+	};
+}
+
+#ACTION {^You wish to be known as %1 (Y/N)?}
+{
+	#NOP : in case we type an illegal name earlier
+	#VAR {CCharGen_CharName} {%1};
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {y};
+	};
+}
+
+#ACTION {^Does the current name you chose meet these criteria? (Y or N)}
+{
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {y};
+	};
+}
+
+#ACTION {^Please enter a password for %1:}
+{
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {$CCharGen_CharPassword};
+	};
+	#ELSE
+	{
+		#EVENT {RECEIVED INPUT}
+		{ 
+			#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+			{
+				#NOP : is a client command;
+			}
+			{
+				#VAR {CCharGen_CharPassword} {%%0}; 
+				#UNEVENT {RECEIVED INPUT};
+			}
+		}
+	};
+}
+
+#ACTION {^Please retype password:}
+{
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {$CCharGen_CharPassword};
+	};
+}
+
+#ACTION {^Are you NEW to the World of Duris?}
+{
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {$CCharGen_IsNewbie};
+	};
+	#ELSE
+	{
+		#NOP : manual entry;
+		#EVENT {RECEIVED INPUT}
+		{ 
+			#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+			{
+				#NOP : is a client command;
+			}
+			{
+				#VAR {CCharGen_IsNewbie} {%%0};
+				#VAR {lDisableEvent} {1};
+				#IF {"$CCharGen_IsNewbie" == "y" || "$CCharGen_IsNewbie" == "Y"}
+				{
+					#VAR {CCharGen_IsNewbie} {y};
+				};
+				#ELSEIF {"$CCharGen_IsNewbie" == "n" || "$CCharGen_IsNewbie" == "N"}
+				{
+					#VAR {CCharGen_IsNewbie} {n};
+				};
+				#ELSE
+				{
+					#NOP : either help or non-valid input;
+					#VAR {lDisableEvent} {0}; 
+				};
+				
+				#IF {$lDisableEvent == 1}
+				{
+					#UNEVENT {RECEIVED INPUT};
+				};
+			}
+		}
+	};
+}
+
+#ACTION {^Press Return and choose your race with care...}
+{
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {};
+	};
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Dynamic key parsing for race choices
+#NOP --------------------------------------------------------------------------
+#VAR CCharGen_ChoiceHuman {}
+#VAR CCharGen_ChoiceOrc {}
+#VAR CCharGen_ChoiceBarbarian {}
+#VAR CCharGen_ChoiceTroll {}
+#VAR CCharGen_ChoiceGrey {}
+#VAR CCharGen_ChoiceDrow {}
+#VAR CCharGen_ChoiceMountain {}
+#VAR CCharGen_ChoiceDuergar {}
+#VAR CCharGen_ChoiceHalfling {}
+#VAR CCharGen_ChoiceGoblin {}
+#VAR CCharGen_ChoiceGnome {}
+#VAR CCharGen_ChoiceKobold {}
+#VAR CCharGen_ChoiceCentaur {}
+#VAR CCharGen_ChoiceOgre {}
+#VAR CCharGen_ChoiceGithzerai {}
+#VAR CCharGen_ChoiceGithyanki {}
+#VAR CCharGen_ChoiceFirbolg {}
+#VAR CCharGen_ChoiceDrider {}
+#VAR CCharGen_ChoiceThrikreen {}
+#VAR CCharGen_ChoiceMinotaur {}
+#VAR CCharGen_PlayerChoice {}
+
+#ACTION {(%.) Human} {#VAR {CCharGen_ChoiceHuman} {%1};}
+#ACTION {(%.) Orc} {#VAR {CCharGen_ChoiceOrc} {%1};}
+#ACTION {(%.) Barbarian} {#VAR {CCharGen_ChoiceBarbarian} {%1};}
+#ACTION {(%.) Troll} {#VAR {CCharGen_ChoiceTroll} {%1};}
+#ACTION {(%.) Grey Elf} {#VAR {CCharGen_ChoiceGrey} {%1};}
+#ACTION {(%.) Drow Elf} {#VAR {CCharGen_ChoiceDrow} {%1};}
+#ACTION {(%.) Mountain Dwarf} {#VAR {CCharGen_ChoiceMountain} {%1};}
+#ACTION {(%.) Duergar Dwarf} {#VAR {CCharGen_ChoiceDuergar} {%1};}
+#ACTION {(%.) Halfling} {#VAR {CCharGen_ChoiceHalfling} {%1};}
+#ACTION {(%.) Goblin} {#VAR {CCharGen_ChoiceGoblin} {%1};}
+#ACTION {(%.) Gnome} {#VAR {CCharGen_ChoiceGnome} {%1};}
+#ACTION {(%.) Kobold} {#VAR {CCharGen_ChoiceKobold} {%1};}
+#ACTION {(%.) Centaur} {#VAR {CCharGen_ChoiceCentaur} {%1};}
+#ACTION {(%.) Ogre} {#VAR {CCharGen_ChoiceOgre} {%1};}
+#ACTION {(%.) Githzerai} {#VAR {CCharGen_ChoiceGithzerai} {%1};}
+#ACTION {(%.) Githyanki} {#VAR {CCharGen_ChoiceGithyanki} {%1};}
+#ACTION {(%.) Firbolg} {#VAR {CCharGen_ChoiceFirbolg} {%1};}
+#ACTION {(%.) Drider} {#VAR {CCharGen_ChoiceDrider} {%1};}
+#ACTION {(%.) Thri-Kreen} {#VAR {CCharGen_ChoiceThrikreen} {%1};}
+#ACTION {(%.) Minotaur} {#VAR {CCharGen_ChoiceMinotaur} {%1};}
+#NOP --------------------------------------------------------------------------
+#NOP --------------------------------------------------------------------------
+
+#ACTION {General listing of classes by race}
+{
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {$CCharGen_CharRaceChoice};
+	};
+	#ELSE
+	{
+		#EVENT {RECEIVED INPUT}
+		{
+			#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+			{
+				#NOP : is a client command;
+			}
+			{
+				#VAR {CCharGen_CharRaceChoice} {%%0};
+				#VAR {lDisableEvent} {1};
+				#IF {"$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceHuman" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceOrc" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceBarbarian" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceTroll" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceGrey" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceDrow" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceMountain" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceDuergar" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceHalfling" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceGoblin" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceGnome" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceKobold" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceCentaur" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceOgre" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceGithzerai" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceGithyanki" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceFirbolg" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceDrider" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceThrikreen" &&
+					 "$CCharGen_CharRaceChoice" != "$CCharGen_ChoiceMinotaur"}
+				{
+					#NOP : either help or non-valid input;
+					#VAR {lDisableEvent} {0};
+				};
+				
+				#IF {$lDisableEvent == 1}
+				{
+					#UNEVENT {RECEIVED INPUT};
+				};
+			}
+		}
+	};
+}
+
+#ACTION {^Is your character Male or Female (Z for race)? (M/F/Z)}
+{
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {$CCharGen_CharGenderChoice};
+	};
+	#ELSE
+	{
+		#EVENT {RECEIVED INPUT}
+		{
+			#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+			{
+				#NOP : is a client command;
+			}
+			{
+				#VAR {CCharGen_CharGenderChoice} {%%0};
+				#VAR {lDisableEvent} {1};
+				#IF {"$CCharGen_CharGenderChoice" != "m" && "$CCharGen_CharGenderChoice" != "M" &&
+					 "$CCharGen_CharGenderChoice" != "f" && "$CCharGen_CharGenderChoice" != "F"}
+				{
+					#IF {"$CCharGen_CharGenderChoice" == "z" || "$CCharGen_CharGenderChoice" == "Z"}
+					{
+						#NOP : return to race page;
+						#VAR {CCharGen_CharGenderChoice} {};
+					};
+					#ELSE
+					{
+						#NOP : either help or non-valid input;
+						#VAR {lDisableEvent} {0}; 
+					};
+				};
+				
+				#IF {$lDisableEvent == 1}
+				{
+					#UNEVENT {RECEIVED INPUT};
+				};
+			}
+		}
+	};
+}
+
+#ACTION {^Please select either H (for Hardcore), N (for Normal)$}
+{
+	#IF {$CCharGen_CharPreRollCreationDone == 1}
+	{
+		#SEND {$CCharGen_CharIsHardcoreChoice};
+	};
+	#ELSE
+	{
+		#EVENT {RECEIVED INPUT}
+		{
+			#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+			{
+				#NOP : is a client command;
+			}
+			{
+				#VAR {CCharGen_CharIsHardcoreChoice} {%%0};
+				#VAR {lDisableEvent} {1};
+				#IF {"$CCharGen_CharIsHardcoreChoice" != "h" && "$CCharGen_CharIsHardcoreChoice" != "H" &&
+					 "$CCharGen_CharIsHardcoreChoice" != "n" %% "$CCharGen_CharIsHardcoreChoice" != "N"}
+				{
+					#NOP : either help or non-valid input;
+					#VAR {lDisableEvent} {0};
+				};
+				
+				#IF {$lDisableEvent == 1}
+				{
+					#UNEVENT {RECEIVED INPUT};
+				};
+			}
+		}
+	};
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Dynamic key parsing for class choices
+#NOP --------------------------------------------------------------------------
+#VAR CCharGen_ChoiceWarrior {}
+#VAR CCharGen_ChoiceRanger {}
+#VAR CCharGen_ChoicePsionicist {};
+#VAR CCharGen_ChoicePaladin {}
+#VAR CCharGen_ChoiceAntiPaladin {}
+#VAR CCharGen_ChoiceCleric {}
+#VAR CCharGen_ChoiceMonk {}
+#VAR CCharGen_ChoiceDruid {}
+#VAR CCharGen_ChoiceShaman {}
+#VAR CCharGen_ChoiceSorcerer {}
+#VAR CCharGen_ChoiceNecromancer {}
+#VAR CCharGen_ChoiceConjurer {}
+#VAR CCharGen_ChoiceRogue {}
+#VAR CCharGen_ChoiceMercenary {}
+#VAR CCharGen_ChoiceBard {}
+#VAR CCharGen_ChoiceBerserker {}
+#VAR CCharGen_ChoiceReaver {}
+#VAR CCharGen_ChoiceIllusionist {}
+#VAR CCharGen_ChoiceAlchemist {}
+#VAR CCharGen_ChoiceTheurgist {}
+#VAR CCharGen_ChoiceBlighter {}
+#VAR CCharGen_ChoiceEthermancer {}
+#VAR CCharGen_ChoiceSummoner {}
+
+#VAR CCharGen_ClassSelectionEnabled {0}
+
+#ACTION {^Class Selection$}
+{
+	#NOP : reset all class choice keys;
+	#VAR {CCharGen_ChoiceWarrior} {};
+	#VAR {CCharGen_ChoiceRanger} {};
+	#VAR {CCharGen_ChoicePsionicist} {};
+	#VAR {CCharGen_ChoicePaladin} {};
+	#VAR {CCharGen_ChoiceAntiPaladin} {};
+	#VAR {CCharGen_ChoiceCleric} {};
+	#VAR {CCharGen_ChoiceMonk} {};
+	#VAR {CCharGen_ChoiceDruid} {};
+	#VAR {CCharGen_ChoiceShaman} {};
+	#VAR {CCharGen_ChoiceSorcerer} {};
+	#VAR {CCharGen_ChoiceNecromancer} {};
+	#VAR {CCharGen_ChoiceConjurer} {};
+	#VAR {CCharGen_ChoiceRogue} {};
+	#VAR {CCharGen_ChoiceMercenary} {};
+	#VAR {CCharGen_ChoiceBard} {};
+	#VAR {CCharGen_ChoiceBerserker} {};
+	#VAR {CCharGen_ChoiceReaver} {};
+	#VAR {CCharGen_ChoiceIllusionist} {};
+	#VAR {CCharGen_ChoiceAlchemist} {};
+	#VAR {CCharGen_ChoiceTheurgist} {};
+	#VAR {CCharGen_ChoiceBlighter} {};
+	#VAR {CCharGen_ChoiceEthermancer} {};
+	#VAR {CCharGen_ChoiceSummoner} {};
+
+	#VAR {CCharGen_ClassSelectionEnabled} {1};
+}
+#ACTION {%.) Warrior} {#VAR {CCharGen_ChoiceWarrior} {%1};}
+#ACTION {%.) Ranger} {#VAR {CCharGen_ChoiceRanger} {%1};}
+#ACTION {%.) Psionicist} {#VAR {CCharGen_ChoicePsionicist} {%1};}
+#ACTION {%.) Paladin} {#VAR {CCharGen_ChoicePaladin} {%1};}
+#ACTION {%.) Anti-Paladin} {#VAR {CCharGen_ChoiceAntiPaladin} {%1};}
+#ACTION {%.) Cleric} {#VAR {CCharGen_ChoiceCleric} {%1};}
+#ACTION {%.) Monk} {#VAR {CCharGen_ChoiceMonk} {%1};}
+#ACTION {%.) Druid} {#VAR {CCharGen_ChoiceDruid} {%1};}
+#ACTION {%.) Shaman} {#VAR {CCharGen_ChoiceShaman} {%1};}
+#ACTION {%.) Sorcerer} {#VAR {CCharGen_ChoiceSorcerer} {%1};}
+#ACTION {%.) Necromancer} {#VAR {CCharGen_ChoiceNecromancer} {%1};}
+#ACTION {%.) Conjurer} {#VAR {CCharGen_ChoiceConjurer} {%1};}
+#ACTION {%.) Rogue} {#VAR {CCharGen_ChoiceRogue} {%1};}
+#ACTION {%.) Mercenary} {#VAR {CCharGen_ChoiceMercenary} {%1};}
+#ACTION {%.) Bard} {#VAR {CCharGen_ChoiceBard} {%1};}
+#ACTION {%.) BeRSeRKeR} {#VAR {CCharGen_ChoiceBerserker} {%1};}
+#ACTION {%.) Reaver} {#VAR {CCharGen_ChoiceReaver} {%1};}
+#ACTION {%.) Illusionist} {#VAR {CCharGen_ChoiceIllusionist} {%1};}
+#ACTION {%.) Alchemist} {#VAR {CCharGen_ChoiceAlchemist} {%1};}
+#ACTION {%.) Theurgist} {#VAR {CCharGen_ChoiceTheurgist} {%1};}
+#ACTION {%.) Blighter} {#VAR {CCharGen_ChoiceBlighter} {%1};}
+#ACTION {%.) Ethermancer} {#VAR {CCharGen_ChoiceEthermancer} {%1};}
+#ACTION {%.) Summoner} {#VAR {CCharGen_ChoiceSummoner} {%1};}
+#NOP --------------------------------------------------------------------------
+#NOP --------------------------------------------------------------------------
+
+#VAR CCharGen_AlignmentSelectionEnabled {0}
+#VAR CCharGen_HometownSelectionEnabled {0}
+#VAR CCharGen_AlignGoodAvailable {0}
+#VAR CCharGen_AlignNeutralAvailable {0}
+#VAR CCharGen_AlignEvilAvailable {0}
+#VAR CCharGen_HTTharnadiaAvailable {0}
+#VAR CCharGen_HTUgtaAvailable {0}
+#VAR CCharGen_HTCharingAvailable {0}
+#VAR CCharGen_HTWoodseerAvailable {0}
+#VAR CCharGen_HTAshrumiteAvailable {0}
+#VAR CCharGen_HTKimordrilAvailable {0}
+
+#ACTION {^Alignment Selection$}
+{
+	#VAR {CCharGen_AlignmentSelectionEnabled} {1};
+	#VAR {CCharGen_AlignGoodAvailable} {0};
+	#VAR {CCharGen_AlignNeutralAvailable} {0};
+	#VAR {CCharGen_AlignEvilAvailable} {0};
+}
+
+
+
+#ACTION {G)ood}
+{
+	#IF {$CCharGen_AlignmentSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_AlignGoodAvailable} {1};
+	};
+}
+
+#ACTION {N)eutral}
+{
+	#IF {$CCharGen_AlignmentSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_AlignNeutralAvailable} {1};
+	};
+}
+
+#ACTION {E)vil}
+{
+	#IF {$CCharGen_AlignmentSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_AlignEvilAvailable} {1};
+	};
+}
+
+
+#ACTION {^Hometown Selection$}
+{
+	#VAR {CCharGen_HometownSelectionEnabled} {1};
+	#VAR {CCharGen_HTTharnadiaAvailable} {0};
+	#VAR {CCharGen_HTUgtaAvailable} {0};
+	#VAR {CCharGen_HTCharingAvailable} {0};
+	#VAR {CCharGen_HTWoodseerAvailable} {0};
+	#VAR {CCharGen_HTAshrumiteAvailable} {0};
+	#VAR {CCharGen_HTKimordrilAvailable} {0};
+}
+
+#ACTION {T)harnadia}
+{
+	#IF {$CCharGen_HometownSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_HTTharnadiaAvailable} {1};
+	};
+}
+
+#ACTION {U)gta}
+{
+	#IF {$CCharGen_HometownSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_HTUgtaAvailable} {1};
+	};
+}
+
+#ACTION {C)haring}
+{
+	#IF {$CCharGen_HometownSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_HTCharingAvailable} {1};
+	};
+}
+
+#ACTION {W)oodseer}
+{
+	#IF {$CCharGen_HometownSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_HTWoodseerAvailable} {1};
+	};
+}
+
+#ACTION {A)shrumite}
+{
+	#IF {$CCharGen_HometownSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_HTAshrumiteAvailable} {1};
+	};
+}
+
+#ACTION {K)imordril}
+{
+	#IF {$CCharGen_HometownSelectionEnabled == 1}
+	{
+		#VAR {CCharGen_HTKimordrilAvailable} {1};
+	};
+}
+
+#ACTION {^Your selection:}
+{
+	#IF {$CCharGen_ClassSelectionEnabled == 1}
+	{
+		#IF {$CCharGen_CharPreRollCreationDone == 1}
+		{
+			#VAR {CCharGen_ClassSelectionEnabled} {0};
+			#SEND {$CCharGen_CharClassChoice};
+		};
+		#ELSE
+		{
+			#EVENT {RECEIVED INPUT}
+			{
+				#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+				{
+					#NOP : is a client command;
+				}
+				{
+					#VAR {CCharGen_CharClassChoice} {%%0};
+					#VAR {lDisableEvent} {1};
+					
+					#IF {("$CCharGen_ChoiceWarrior" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceWarrior") ||
+						 ("$CCharGen_ChoiceRanger" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceRanger") ||
+						 ("$CCharGen_ChoicePsionicist" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoicePsionicist") ||
+						 ("$CCharGen_ChoicePaladin" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoicePaladin") ||
+						 ("$CCharGen_ChoiceAntiPaladin" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceAntiPaladin") ||
+						 ("$CCharGen_ChoiceCleric" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceCleric") ||
+						 ("$CCharGen_ChoiceMonk" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceMonk") ||
+						 ("$CCharGen_ChoiceDruid" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceDruid") ||
+						 ("$CCharGen_ChoiceShaman" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceShaman") ||
+						 ("$CCharGen_ChoiceSorcerer" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceSorcerer") ||
+						 ("$CCharGen_ChoiceNecromancer" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceNecromancer") ||
+						 ("$CCharGen_ChoiceConjurer" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceConjurer") ||
+						 ("$CCharGen_ChoiceRogue" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceRogue") ||
+						 ("$CCharGen_ChoiceMercenary" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceMercenary") ||
+						 ("$CCharGen_ChoiceBard" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceBard") ||
+						 ("$CCharGen_ChoiceBerserker" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceBerserker") ||
+						 ("$CCharGen_ChoiceReaver" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceReaver") ||
+						 ("$CCharGen_ChoiceIllusionist" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceIllusionist") ||
+						 ("$CCharGen_ChoiceAlchemist" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceAlchemist") ||
+						 ("$CCharGen_ChoiceTheurgist" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceTheurgist") ||
+						 ("$CCharGen_ChoiceBlighter" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceBlighter") ||
+						 ("$CCharGen_ChoiceEthermancer" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceEthermancer") ||
+						 ("$CCharGen_ChoiceSummoner" != "" && "$CCharGen_CharClassChoice" == "$CCharGen_ChoiceSummoner")}
+					{
+						#NOP nothing;
+					};
+					#ELSE
+					{
+						#NOP : either help or non-valid input;
+						#VAR {lDisableEvent} {0};
+					};
+					
+					#IF {$lDisableEvent == 1}
+					{
+						#VAR {CCharGen_ClassSelectionEnabled} {0};
+						#UNEVENT {RECEIVED INPUT};
+					};
+				}
+			}
+		};
+	};
+	#ELSEIF {$CCharGen_AlignmentSelectionEnabled == 1}
+	{
+		#IF {$CCharGen_CharPreRollCreationDone == 1}
+		{
+			#VAR {CCharGen_AlignmentSelectionEnabled} {0};
+			#SEND {$CCharGen_CharAlignmentChoice};
+		};
+		#ELSE
+		{
+			#EVENT {RECEIVED INPUT}
+			{
+				#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+				{
+					#NOP : is a client command;
+				}
+				{
+					#VAR {CCharGen_CharAlignmentChoice} {%%0};
+					#VAR {lDisableEvent} {1};
+					#IF {($CCharGen_AlignGoodAvailable == 1 &&
+							("$CCharGen_CharAlignmentChoice" == "g" || "$CCharGen_CharAlignmentChoice" == "G")) ||
+						 ($CCharGen_AlignEvilAvailable == 1 &&
+								("$CCharGen_CharAlignmentChoice" == "e" || "$CCharGen_CharAlignmentChoice" == "E")) ||
+						 ($CCharGen_AlignNeutralAvailable == 1 &&
+								("$CCharGen_CharAlignmentChoice" == "n" || "$CCharGen_CharAlignmentChoice" == "N"))}
+					{
+						#NOP nothing;
+					};
+					#ELSE
+					{
+						#NOP : either help or non-valid input;
+						#VAR {lDisableEvent} {0};
+					};
+					
+					#IF {$lDisableEvent == 1}
+					{
+						#VAR {CCharGen_AlignmentSelectionEnabled} {0};
+						#UNEVENT {RECEIVED INPUT};
+					};
+				}
+			}
+		};
+	};
+	#ELSEIF {$CCharGen_HometownSelectionEnabled == 1}
+	{
+		#IF {$CCharGen_CharPreRollCreationDone == 1}
+		{
+			#VAR {CCharGen_HometownSelectionEnabled} {0};
+			#SEND {$CCharGen_CharStartTownChoice};
+		};
+		#ELSE
+		{
+			#EVENT {RECEIVED INPUT}
+			{
+				#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+				{
+					#NOP : is a client command;
+				}
+				{
+					#VAR {CCharGen_CharStartTownChoice} {%%0};
+					#VAR {lDisableEvent} {1};
+					#IF {"$CCharGen_CharStartTownChoice" == "o" || "$CCharGen_CharStartTownChoice" == "O" ||
+						 ($CCharGen_HTTharnadiaAvailable == 1 && ("$CCharGen_CharStartTownChoice" == "t" || "$CCharGen_CharStartTownChoice" == "T")) ||
+						 ($CCharGen_HTUgtaAvailable == 1 && ("$CCharGen_CharStartTownChoice" == "u" || "$CCharGen_CharStartTownChoice" == "U")) ||
+						 ($CCharGen_HTCharingAvailable == 1 && ("$CCharGen_CharStartTownChoice" == "c" || "$CCharGen_CharStartTownChoice" == "C")) ||
+						 ($CCharGen_HTWoodseerAvailable == 1 && ("$CCharGen_CharStartTownChoice" == "w" || "$CCharGen_CharStartTownChoice" == "W")) ||
+						 ($CCharGen_HTKimordrilAvailable == 1 && ("$CCharGen_CharStartTownChoice" == "k" || "$CCharGen_CharStartTownChoice" == "K")) ||
+						 ($CCharGen_HTAshrumiteAvailable == 1 && ("$CCharGen_CharStartTownChoice" == "a" || "$CCharGen_CharStartTownChoice" == "A"))}
+					{
+						#NOP nothing;
+					};
+					#ELSE
+					{
+						#NOP : either help or non-valid input;
+						#VAR {lDisableEvent} {0};
+					};
+					
+					#IF {$lDisableEvent == 1}
+					{
+						#VAR {CCharGen_HometownSelectionEnabled} {0};
+						#UNEVENT {RECEIVED INPUT};
+					};
+				}
+			}
+		};
+	};
+}
+
+
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#NOP
+#NOP                     A U T O     R O L L E R
+#NOP
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#NOP : read in roller cfg and code
+#READ _chargen-roller.tin
+
+
+#NOP : check char creation completion before rolling
+#ACTION {^HOMETOWN:}
+{
+	#IF {$CCharGen_RollerInvoked == 0}
+	{
+		#VAR {CCharGen_CharPreRollCreationDone} {1};
+		
+		#NOP : initialize roller;
+		_CCharGen_Roller_AliasFunc_Init;
+		#VAR {CCharGen_ScanRolledStats} {1};
+		#VAR {CCharGen_RollerInvoked} {1};
+		
+		#FORMAT {CCharGen_CurrentTimestamp} {%t}{%Y%m%d-%H%M:%S};
+		#VAR {CCharGen_RollStartTimestamp} {$CCharGen_CurrentTimestamp};
+		#FORMAT {CCharGen_RollStartEpochTimestamp} {%T};
+		CCharGen_AliasFunc_LogStatsDemark ============================================================;
+		CCharGen_AliasFunc_LogStats <070>Roller Rolling a $CCharGen_CharRace $CCharGen_CharClass;
+		CCharGen_AliasFunc_LogStats <070>Roller Start Time: $CCharGen_RollStartTimestamp, Reroll Count : $CCharGen_RerollCount;
+		CCharGen_AliasFunc_LogStatsDemark ------------------------------;
+
+		#CLASS {ccharprerollclass} {write} {$DURIS_CFG_LOGS_PATH/.tmp.tin};
+		#CLASS {ccharrollcfgclass} {write} {$DURIS_CFG_LOGS_PATH/.tmp2.tin};
+	};
+}
+
+
+#VAR CCharGen_RolledValue {}
+#VAR RetVal_ScoreStringToNumber {}
+#VAR CCharGen_to_Roller_Resort_Flag2 {};
+
+#VAR CCharGen_ScanAdjustedStatAfterBonusTable
+{
+	{s}{0}
+	{p}{0}
+	{d}{0}
+	{i}{0}
+	{a}{0}
+	{w}{0}
+	{c}{0}
+	{h}{0}
+	{l}{0}
+}
+
+#ACTION {Strength: %1 Power: %2}
+{	
+	#IF {$CCharGen_ScanRolledStats == 1}
+	{
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Str $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Strength : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+		
+		#FORMAT {CCharGen_RolledValue} {%p} {%2};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Pow $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Power : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+	};
+	
+	#IF {$CCharGen_ScanAdjustedStatAfterBonusTable[s] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[s]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[s] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[s]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[p] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[p]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%2};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[p] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[p]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+}
+
+#ACTION {Dexterity: %1 Intelligence: %2}
+{
+	#IF {$CCharGen_ScanRolledStats == 1}
+	{
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Dex $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Dexterity : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+		
+		#FORMAT {CCharGen_RolledValue} {%p} {%2};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Int $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Intelligence : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+	};
+	
+	#IF {$CCharGen_ScanAdjustedStatAfterBonusTable[d] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[d]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[d] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[d]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[i] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[i]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%2};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[i] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[i]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+}
+
+#ACTION {Agility: %1 Wisdom: %2}
+{
+	#IF {$CCharGen_ScanRolledStats == 1}
+	{
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Agi $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Agility : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+		
+		#FORMAT {CCharGen_RolledValue} {%p} {%2};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Wis $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Wisdom : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+	};
+	
+	#IF {$CCharGen_ScanAdjustedStatAfterBonusTable[a] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[a]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[a] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[a]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[w] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[w]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%2};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[w] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[w]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+}
+
+#ACTION {Constitution: %1 Charisma: %2}
+{
+	#IF {$CCharGen_ScanRolledStats == 1}
+	{
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Con $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Constitution : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+		
+		#FORMAT {CCharGen_RolledValue} {%p} {%2};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Cha $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Charisma : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+	};
+	
+	#IF {$CCharGen_ScanAdjustedStatAfterBonusTable[c] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[c]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[c] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[c]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[h] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[h]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%2};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[h] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[h]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+}
+
+#ACTION {Luck: %1 Unused: %2}
+{
+	#IF {$CCharGen_ScanRolledStats == 1}
+	{
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		CCharGen_AliasFunc_ScoreStringToNumber $CCharGen_RolledValue;
+		_CCharGen_Roller_AliasFunc_AddRoll Luc $RetVal_ScoreStringToNumber;
+		CCharGen_AliasFunc_LogStats Luck : $CCharGen_RolledValue($RetVal_ScoreStringToNumber);
+	};
+	
+	#IF {$CCharGen_ScanAdjustedStatAfterBonusTable[l] == 1}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[l]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "excellent"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+	#ELSEIF {$CCharGen_ScanAdjustedStatAfterBonusTable[l] == 2}
+	{
+		#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[l]} {0};
+		#FORMAT {CCharGen_RolledValue} {%p} {%1};
+		#IF {"$CCharGen_RolledValue" == "very good"}
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {1};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_to_Roller_Resort_Flag2} {0};
+		};
+		
+		_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex $CCharGen_to_Roller_Resort_Flag2;
+	};
+}
+
+#ACTION {^Rerolling this character.}
+{
+	#MATH CCharGen_RerollCount {$CCharGen_RerollCount + 1};
+	
+	#FORMAT {CCharGen_CurrentTimestamp} {%t} {%Y%m%d-%H%M:%S};
+	#FORMAT {CCharGen_RollTmpEpochTimestamp} {%T};
+	#MATH lDiffTime {$CCharGen_RollTmpEpochTimestamp - $CCharGen_RollStartEpochTimestamp};
+	#MATH lAvgRollsPerSec1000 {($CCharGen_RerollCount+1) * 1000 / $lDiffTime};
+	#MATH lAvgRollsPerSecDecimal {$lAvgRollsPerSec1000 % 1000};
+	#MATH lAvgRollsPerSec {$lAvgRollsPerSec1000 / 1000};
+
+	CCharGen_AliasFunc_LogInfo Reroll Count : $CCharGen_RerollCount;
+	
+	CCharGen_AliasFunc_LogStatsDemark ============================================================;
+	CCharGen_AliasFunc_LogStats Time: $CCharGen_CurrentTimestamp, Reroll Count : $CCharGen_RerollCount;
+	CCharGen_AliasFunc_LogStats Average Rolls Per Second = $lAvgRollsPerSec:$lAvgRollsPerSecDecimal;
+	CCharGen_AliasFunc_LogStatsDemark ------------------------------;
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Parses score string and converts to its known minimum value.
+#NOP - The reason for doing this step here is because some scores consist
+#NOP - of multiple 'words' and will be more complex to manage when passed into
+#NOP - chargen-roller script raw with other variables.
+#NOP - This routine directly reads the constants for each score range
+#NOP - minimum defined inside the chargen-roller configuration file.
+#NOP -
+#NOP - arg 0 (ie. all args) : the score string
+#NOP --------------------------------------------------------------------------
+#ALIAS {CCharGen_AliasFunc_ScoreStringToNumber}
+{
+	#IF {"%0" == "above average"}
+	{
+		#VAR {RetVal_ScoreStringToNumber} 
+			{$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[AAVG]};
+	};
+	#ELSEIF {"%0" == "good"}
+	{
+		#VAR {RetVal_ScoreStringToNumber} 
+			{$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[GD]};
+	};
+	#ELSEIF {"%0" == "very good"}
+	{
+		#VAR {RetVal_ScoreStringToNumber} 
+			{$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[VGD]};
+	};
+	#ELSEIF {"%0" == "average"}
+	{
+		#VAR {RetVal_ScoreStringToNumber} 
+			{$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[AVG]};
+	};
+	#ELSEIF {"%0" == "excellent"}
+	{
+		#VAR {RetVal_ScoreStringToNumber} 
+			{$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[EXCL]};
+	};
+	#NOP : other scores will not be encountered;
+}
+
+#ACTION {^Do you want to reroll this char (y/n) [y]:}
+{
+	#IF {$_CCHARGEN_ROLLER_CFG_AUTO_BONUS == 1}
+	{
+		_CCharGen_Roller_AliasFunc_EvaluateRolls;
+		
+		#IF {$_CCharGen_Roller_to_Chargen_RerollFlag == 1}
+		{
+			#VAR {CCharGen_ScanRolledStats} {1};
+			_CCharGen_Roller_AliasFunc_Reset;
+			#SEND {y};
+		};
+		#ELSE
+		{
+			#VAR {CCharGen_ScanRolledStats} {0};
+			#SEND {n};
+		};
+	};
+	#ELSE
+	{
+		#EVENT {RECEIVED INPUT}
+		{
+			#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+			{
+				#NOP : is a client command;
+			}
+			{
+				#VAR {lRerollChoice} {%%0};
+				#VAR {lDisableEvent} {1};
+
+				#IF {"$lRerollChoice" == "y" || "$lRerollChoice" == "Y"}
+				{
+					#VAR {CCharGen_ScanRolledStats} {1};
+				};
+				#ELSEIF {"$lRerollChoice" == "n" || "$lRerollChoice" == "N"}
+				{
+					#VAR {CCharGen_ScanRolledStats} {0};
+				};
+				#ELSE
+				{
+					#VAR {lDisableEvent} {0};
+				};
+						
+				#IF {$lDisableEvent == 1}
+				{
+					#UNEVENT {RECEIVED INPUT};
+				};
+				#UNEVENT {RECEIVED INPUT};
+			}
+		}
+	};
+}
+
+#ACTION {^Enter stat%1for %2 bonus:}
+{
+	#IF {$_CCHARGEN_ROLLER_CFG_AUTO_BONUS == 1}
+	{
+		#NOP : let the roller script do all the work;
+		_CCharGen_Roller_AliasFunc_AddBonus;
+		
+		#MATH lTmp_VGdScore_Plus_Bonus 
+			{$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[VGD] + $_CCHARGEN_ROLLER_CFG_BONUSROLL_VAL_K};
+
+		#MATH lTmp_GdScore_Plus_Bonus 
+			{$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[GD] + $_CCHARGEN_ROLLER_CFG_BONUSROLL_VAL_K};
+			
+		#IF {$_CCharGen_Roller_to_Chargen_BonusStatNewScore == $lTmp_VGdScore_Plus_Bonus}
+		{
+			#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[$_CCharGen_Roller_to_Chargen_BonusStatKey]} {1};
+		};
+		#ELSEIF {$_CCharGen_Roller_to_Chargen_BonusStatNewScore == $lTmp_GdScore_Plus_Bonus}
+		{
+			#VAR {CCharGen_ScanAdjustedStatAfterBonusTable[$_CCharGen_Roller_to_Chargen_BonusStatKey]} {2};
+		};
+		#ELSE
+		{
+			_CCharGen_Roller_AliasFunc_ResortRolledLists $_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex 0;
+		};
+		
+		#NOP : send the 'result' on which stat to assign the bonus to;
+		#SEND {$_CCharGen_Roller_to_Chargen_BonusStatKey};
+	};
+}
+
+#VAR CCharGen_SizeOfSwapList {};
+#VAR CCharGen_SwapList_Iter {0};
+
+#ACTION {^Do you want to swap%*stats (Y/N):}
+{
+	#IF {$_CCHARGEN_ROLLER_CFG_AUTO_BONUS == 1}
+	{
+		#IF {$CCharGen_SwapList_Iter == 0}
+		{
+			_CCharGen_Roller_AliasFunc_GenerateSwapList;
+			#LIST {_CCharGen_Roller_to_Chargen_SwapList} {size} {CCharGen_SizeOfSwapList};
+			#VAR {CCharGen_SwapList_Iter} {1};
+		};
+		
+		#IF {$CCharGen_SizeOfSwapList == 0 || $CCharGen_SwapList_Iter > $CCharGen_SizeOfSwapList}
+		{
+			#SEND {n};
+		};
+		#ELSE
+		{
+			#SEND {y};
+		};
+	};
+}
+
+#ACTION {^Enter two letters separated by a space to swap:}
+{
+	#IF {$_CCHARGEN_ROLLER_CFG_AUTO_BONUS == 1}
+	{
+		#SEND {$_CCharGen_Roller_to_Chargen_SwapList[$CCharGen_SwapList_Iter]};
+		#MATH {CCharGen_SwapList_Iter} {$CCharGen_SwapList_Iter + 1};
+	};
+}
+
+#ACTION {^Do you want to keep this character? (Y/N/Q)}
+{
+	#FORMAT {CCharGen_CurrentTimestamp} {%t} {%Y%m%d-%H%M:%S};
+	#VAR {CCharGen_RollEndTimestamp} {$CCharGen_CurrentTimestamp};
+	#FORMAT {CCharGen_RollEndEpochTimestamp} {%T};
+	#MATH lDiffTime {$CCharGen_RollEndEpochTimestamp - $CCharGen_RollStartEpochTimestamp};
+	#MATH lSeconds {$lDiffTime % 60};
+	#MATH lMinutes {$lDiffTime / 60};
+	#MATH lHours {$lMinutes / 60};
+	#MATH lMinutes {$lMinutes % 60};
+	#MATH lDays {$lHours / 60};
+	#MATH lHours {$lHours % 60};
+	
+	#MATH lAvgRollsPerSec1000 {($CCharGen_RerollCount+1) * 1000 / $lDiffTime};
+	#MATH lAvgRollsPerSecDecimal {$lAvgRollsPerSec1000 % 1000};
+	#MATH lAvgRollsPerSec {$lAvgRollsPerSec1000 / 1000};
+	CCharGen_AliasFunc_LogStatsDemark ************************************************************;
+	CCharGen_AliasFunc_LogStats <170>Time when rolls ended: $CCharGen_CurrentTimestamp, Reroll Count : $CCharGen_RerollCount;
+	CCharGen_AliasFunc_LogStats <170>Average Rolls Per Second = $lAvgRollsPerSec:$lAvgRollsPerSecDecimal;
+	CCharGen_AliasFunc_LogStats <170>Approximate Time Taken = $lDays days, $lHours hours, $lSeconds seconds;
+	CCharGen_AliasFunc_LogStatsDemark ************************************************************;
+	
+	#IF {$_CCHARGEN_ROLLER_CFG_AUTO_BONUS == 1}
+	{
+		#SEND {y};
+	};
+}
+
+#ACTION {^*** PRESS RETURN to read Duris rules}
+{
+	#IF {$_CCHARGEN_ROLLER_CFG_AUTO_BONUS == 1}
+	{
+		#SEND {};
+	};
+}
+
+#ACTION {^*** Do you agree to abide by everything written in the set of rules?}
+{
+	#IF {$_CCHARGEN_ROLLER_CFG_AUTO_BONUS == 1}
+	{
+		#SEND {y};
+	};
+}
+
+#ACTION {^*** PRESS RETURN:}
+{
+	#IF {$_CCHARGEN_ROLLER_CFG_AUTO_BONUS == 1}
+	{
+		#SEND {};
+	};
+}
+
+#ACTION {[5] Delete this character.}
+{
+	#VAR {CCharGen_RollComplete} {1};
+
+	#VAR lRingBell {1};
+	#VAR lBellPending {0};
+	#EVENT {RECEIVED INPUT}
+	{
+		#VAR {lRingBell} {1};
+		#UNEVENT {RECEIVED INPUT};
+
+		#REGEX {%%0} {{$DURIS_CFG_TINTIN_CHAR}%*}
+		{
+			#NOP : is a client command;
+		}
+		{
+			#VAR {PostRollingChoice} {%%0};
+			#VAR {lDisableEvent} {1};
+			#IF {"PostRollingChoice" != "0" && "PostRollingChoice" != "1" &&
+				 "PostRollingChoice" != "2" && "PostRollingChoice" != "3" &&
+				 "PostRollingChoice" != "4" && "PostRollingChoice" != "5"}
+			{
+				#VAR {lDisableEvent} {0};
+			};
+			#ELSE
+			{
+				#VAR {lRingBell} {0};
+			};
+			
+			#IF {$lDisableEvent == 1}
+			{
+				#UNEVENT {RECEIVED INPUT};
+			};
+		}
+	}
+
+	#WHILE {$lRingBell == 1}
+	{
+		#IF {$lBellPending == 0}
+		{
+			#DELAY {lBellRing}
+			{
+				#IF {$lRingBell == 1}
+				{
+					#SHOWME {\a};
+				};
+				#VAR {lBellPending} {0};
+			} {10};
+			#VAR {lBellPending} {1};
+		};
+	};
+}
+
+

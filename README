@@ -1,0 +1,210 @@
+*******************************************************************************
+
+                         R O L L E R   R E A D M E
+
+*******************************************************************************
+Introduction
+------------
+This roller script set is written for tintin & wintin.
+If you use cmud or zmud or other mud clients, you can still download wintin (free), 
+roll your character. And switch back to your preferred mud client after character
+creation.
+
+Objectives & Overview
+---------------------
+The objective of this roller is to provide a level playing field between those
+who can code and those who can't with respect to character generation. It is not
+the goal of the roller to give you a 'powerful' character fast as that is limited
+by the nature of the PRNG (pseudo random number generator) on the server side.
+
+Credits
+-------
+Thanks to Lohrr for confirming the following:
+1. All stats less than good will be bumped to 80 (base) after character generation
+2. Excellent = 92 (base) during character generation
+
+Features
+--------
+1. Three user configurable heuristics for minimum stat acceptance, bonus roll 
+assignments and stat swap decisions. User-friendly built-in aliases available for 
+that.
+
+2. Can be fully automated
+- Able to assign bonuses and swap stats automatically in case you happen to be 
+away from keyboard while waiting, or busy with something, so that you won't lose 
+'character' due to session inactivity and DC.
+- if you prefer to assign bonuses yourself, you can disable the full automation
+feature, stats swap must also be manually done in this case.
+
+3. provide stats logging in html (can be disabled) to gather statistics
+
+4. provide mud logging in html (disabled by default)
+
+5. experimental feature : tries to reconnect and resume rolling if the mud 
+reboots (not tested)
+
+
+
+*******************************************************************************
+
+                              INSTRUCTIONS
+                              
+*******************************************************************************
+1. Download wintin/tintin from here: http://tintin.sourceforge.net/download.php
+If you are using windows, download wintin.
+
+2. Install the app (or build the app if on linux). If you are using windows 8, 
+it will be installed under "Users", inside "Roaming" directory under "AppData". 
+AppData is a hidden directory and you can view it by manipulating "folder options" 
+and check on 'show hidden files/directories' option (google it if you still don't 
+know how). There should be a wintin shortcut made on your desktop, and you can always
+right-click, choose properties, and check the location of the installed files in
+this manner.
+
+3. Copy all the scripts into the installed location. After rolling your character,
+you will find 2 files (.tmp.tin and .tmp2.tin). Your password is stored in clear
+text in these files to support reconnection feature, so avoid using sensitive 
+passwords (like those you use for your bank accounts and other important stuff :P)
+You can delete these files after rolling, or leave them there since they won't
+affect a new character generation process.
+
+4. Launch wintin from installed location or use the desktop shortcut.
+
+5. Type the following:
+#read chargen.tin
+This will load all the scripts, aliases and variables needed.
+
+6. Configuration commands/aliases and their syntax:
+a. showstatcfg
+--------------
+Shows the current configuration. If you have not yet configured anything, it
+will show you the defaults.
+
+b. statweight <positive integer>
+--------------------------------
+Configures the total minimum acceptable weight before accepting the rolls.
+Currently, the weights of scores are given in _chargen-roller-cfg.tin as follows:
+   good = 1
+   v.good = 3
+   excellent = 5
+So setting the the statweight value to 12 will be akin to aiming for: 4 v.gds, OR
+2 excellents and 2 goods, and so on and so forth.
+If you want to decide on your own weightage or even ignore 'good' scores (zero it), 
+feel free to modify this file, though it's not recommended for people who don't 
+know what they are doing.
+
+From testing, recommended values would be 12-13, which should take less than
+10000 rolls (1-5 hours or so).
+Scores of 15-16 have been achieved in 18-24 hours before.
+The improbability of achieving higher weights increases exponentially, and weights
+that go beyond 16 may take unreasonably long and thus not recommended.
+
+Syntax example:
+statweight 12
+<Enter>
+
+c. statcfg <1-9> <Str|Pow|Dex|Int|Agi|Wis|Con|Cha|Luc>
+------------------------------------------------------
+Configures the priority list to aid the roller in assigning bonuses and swapping
+stats.
+The first argument takes a value from 1-9 (1 being highest priority, 9 lowest).
+The second argument gives the stat for the priority assignment.
+The priorites are managed in a list and you should have all 9 unique stats inside.
+The script will prevent you from proceeding with the character rolling if you
+do not set this list correctly. Use 'showstatcfg' to view what you've set so far.
+
+Syntax example for setting constituion as highest priority (case is important):
+statcfg 1 Con
+<Enter>
+
+d. statcfg2 <1-4>
+-----------------
+Configures a heuristic value to tell the roller how many v.gds you wish to convert
+to excellents through bonus rolls. The final result actually depends on your
+accepted rolls that are in line with the 'statweight' you set.
+Accepts a value of 1-4.
+
+If you have set it to 4, what it means is that it will try to assign bonus rolls
+as best as possible to end up with 4 excellents post-assignment. 
+Bonus rolls will never be assigned to naturally rolled excellents (92-100) in 
+order to not accidentally waste the bonus rolls.
+If you have set it to 2, you have a good chance of ending up with 2 guaranteed
+excellents of 96+ scores.
+
+For simplicity, a higher value results in more balanced excellents, while 
+a lower value results in more focused and possibly stronger excellents in the
+top prioritized stats.
+
+The algorithm will try to avoid wasting rolls, so you will never have bonuses
+added to naturally rolled excellents (92-100), and the only way you might have
+3 bonuses assigned to a very good is when one of the first two v.gds rolled
+are actually exactly 86 (detectable by the script) and your heuristic value is 
+2 or less (max wastage/loss from bonus assignments in this scenario is 1 point).
+
+Syntax example for setting a heuristic value of 2:
+statcfg2 2
+<Enter>
+
+Recommended values are either 2 (more focused) or 4 (more balanced).
+
+
+7. After using statweight, statcfg, and statcfg2 to configure your roller, you
+are ready to start the character generation process.
+But before that, you can also customize a few other things:
+
+e. statauto <0|1>
+-----------------
+Enable or disable full automation. By default, full automation is enabled. If
+disabled, you need to assign bonus rolls and swap stats manually.
+1 - enable
+0 - disable
+
+Syntax example for disabling full automation:
+statauto 0
+<Enter>
+
+If you disable full automation, you need only to do statweight as the rest of the
+configuration becomes meaningless.
+
+f. enablelog <0|1>
+------------------
+Enable or disable mud logging. By default disabled. If enabled, mud output will
+be captured in a log file in html format. The log file can be found inside the
+same directory.
+1 - enable
+0 - disable
+
+Syntax example for enabling mud logging:
+enablelog 1
+<Enter>
+
+g. enablestats <0|1>
+--------------------
+Enable or disable stats logging. By default enabled. Statistics are collected.
+They include values of all the rolls, number of rolls made, time taken, and 
+also show you how the bonuses were assigned and swapped after a set of rolls is 
+accepted.
+1 - enable
+0 - disable
+
+Syntax example for disable stats logging:
+enablestats 0
+<Enter>
+
+You may choose to disable stats to save disk space. A day of rolling should result
+in a stats file of about 100 MB.
+
+
+7. Finally we can start, use the 'duris' alias:
+duris
+<Enter>
+
+And proceed with your character generation as per normal.
+
+
+*******************************************************************************
+
+Author: Grimgar/Ragmirg/Grimlas/Salmirg
+Date  : Mar-9 2015
+
+*******************************************************************************

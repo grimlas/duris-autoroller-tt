@@ -1,0 +1,71 @@
+#NOP VSOF;
+
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#NOP
+#NOP                   R O L L E R   U S E R   C O N F I G
+#NOP                   -----------------------------------
+#NOP
+#NOP    - customization script for the common player
+#NOP
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#NOP ==========================================================================
+#NOP = User configurable options
+#NOP ==========================================================================
+
+#NOP --------------------------------------------------------------------------
+#NOP - _CCHARGEN_ROLLER_CFG_ROLL_ASSIGNMENT_HEURISTICS_DEFAULT 
+#NOP - 
+#NOP - A priority list for the stats to help the roller sort the results
+#NOP - and perform bonus assignments and swapping
+#NOP --------------------------------------------------------------------------
+#CLASS {ccharrollcfgclass} {open}
+#VAR _CCHARGEN_ROLLER_CFG_ROLL_ASSIGNMENT_HEURISTICS_DEFAULT
+{
+	{StatsPriorityList} {{1}{Luc}{2}{Con}{3}{Dex}{4}{Agi}{5}{Str}{6}{Pow}{7}{Wis}{8}{Int}{9}{Cha}}
+}
+#CLASS {ccharrollcfgclass} {close}
+
+#NOP --------------------------------------------------------------------------
+#NOP - _CCHARGEN_ROLLER_CFG_WEIGHT
+#NOP - 
+#NOP - minimum sum weight to accept for rolls:
+#NOP - current coded weights can be found in _chargen-roller-cfg.tin
+#NOP - and as follows:
+#NOP -    good = 1
+#NOP -    v.good = 3
+#NOP -    excellent = 5
+#NOP - recommended setting : 12-13 (about 4 very goods)
+#NOP --------------------------------------------------------------------------
+#CLASS {ccharrollcfgclass} {open}
+#VAR _CCHARGEN_ROLLER_CFG_WEIGHT {12}
+#CLASS {ccharrollcfgclass} {close}
+
+#NOP --------------------------------------------------------------------------
+#NOP - _CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC
+#NOP -
+#NOP - {1 - 4} : value ranges from 1 to 4
+#NOP - a heuristic to help roller decide how many v.gds to convert to excellents
+#NOP - setting a higher number will result in more balanced high stats (91+)
+#NOP - setting a lower number will increase chances of getting confirmed high
+#NOP -   excellents (96+) in the high priority stats as dictated by StatsPriorityList
+#NOP - the actual result ultimately depends on the nature of your rolls and min
+#NOP - weight acceptance (see README for more info)
+#NOP --------------------------------------------------------------------------
+#CLASS {ccharrollcfgclass} {open}
+#VAR _CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC {1}
+#CLASS {ccharrollcfgclass} {close}
+
+#NOP --------------------------------------------------------------------------
+#NOP - _CCHARGEN_ROLLER_CFG_AUTO_BONUS
+#NOP -
+#NOP - {0} : Manually input bonuses and swap
+#NOP - (1) : Automatically input bonuses and swap
+#NOP --------------------------------------------------------------------------
+#CLASS {ccharrollcfgclass} {open}
+#VAR _CCHARGEN_ROLLER_CFG_AUTO_BONUS {1}
+#CLASS {ccharrollcfgclass} {close}
+
+#NOP ==========================================================================
+#NOP ==========================================================================
+

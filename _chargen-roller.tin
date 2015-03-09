@@ -1,0 +1,590 @@
+#NOP VSOF;
+
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#NOP
+#NOP                           R O L L E R
+#NOP                           -----------
+#NOP
+#NOP    - the roller script is a fully automated roller designed to aid people with
+#NOP      little to no coding skills to roll a Duris character with the desired
+#NOP      stats scores within a reasonable amount of time (of course depending
+#NOP      on the player's requirement and stringency)
+#NOP
+#NOP    - while it cannot be guaranteed that it will outperform current
+#NOP      available rollers (timewise), it should not under-perform given the
+#NOP      similar player requirements
+#NOP
+#NOP    - this roller takes a slightly different approach from existing rollers
+#NOP      to solving the 'automated rolling' problem
+#NOP
+#NOP    - it can be fully automated which means it will add bonus rolls and 
+#NOP	  swap stats automatically as well, completing your character creation
+#NOP	  automatically once started
+#NOP
+#NOP    - the player can configure two lists which will help the
+#NOP      roller make decisions on how to add bonuses and swap stats
+#NOP      => auto-add bonuses and stat swapping can be disabled if you're not 
+#NOP      comfortable with it (this means you need to keep monitoring the progress
+#NOP	  regularly)
+#NOP
+#NOP    - it takes advantage of the following information received with thanks
+#NOP      from Lohrr:
+#NOP		1. All rolled scores at character creation stage reflect base scores
+#NOP		2. 'excellent' ranges from 92-100
+#NOP		3. All scores below 'good' will be bumped to 80 (base) once character
+#NOP		   is accepted
+#NOP		4. Each bonus is worth 5 points
+#NOP
+#NOP
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#VAR _CCharGen_Roller_Str {}
+#VAR _CCharGen_Roller_Agi {}
+#VAR _CCharGen_Roller_Dex {}
+#VAR _CCharGen_Roller_Con {}
+#VAR _CCharGen_Roller_Pow {}
+#VAR _CCharGen_Roller_Int {}
+#VAR _CCharGen_Roller_Wis {}
+#VAR _CCharGen_Roller_Cha {}
+#VAR _CCharGen_Roller_Luc {}
+
+
+#NOP --------------------------------------------------------------------------
+#NOP - values to initialize during init
+#NOP --------------------------------------------------------------------------
+
+#NOP : total weights computed from Player requirements
+#VAR _CCharGen_Roller_RequiredWeights {0}
+
+#NOP : heuristics lists generated from Player requirements
+#NOP : will be post-processed to eliminate invalid combinations
+#LIST _CCharGen_Roller_Player_StatsPriorityList {}
+#LIST _CCharGen_Roller_Player_MinScoresList {}
+
+#NOP --------------------------------------------------------------------------
+#NOP --------------------------------------------------------------------------
+
+#NOP //////////////////////////////////////////////////////////////////////////
+
+#NOP --------------------------------------------------------------------------
+#NOP - values to reset and clear each reroll
+#NOP --------------------------------------------------------------------------
+
+#NOP : total weights computed from rolled scores (including bonus rolls)
+#VAR _CCharGen_Roller_RolledWeights {0}
+
+#NOP : A sorted list of all stats(aka attributes) in descending order of 
+#NOP : rolled scores.
+#LIST _CCharGen_Roller_RolledStatsSortedList {}
+
+#NOP : A list that corresponds to sorted stats lists
+#NOP : The values are equivalent to the min score for the different score
+#NOP : ranges, and are used as sort keys.
+#LIST _CCharGen_Roller_RolledSortKeyList {}
+
+#NOP : This list keeps track of how many bonus rolls have been assigned
+#LIST _CCharGen_Roller_BonusAssignedList {}
+
+#NOP : This is a swap list generated after all bonus rolls assigned
+#NOP : The swap list is used by chargen script to swap the scores for 
+#NOP : stat pairs to attain what's in line with Player requirements
+#LIST _CCharGen_Roller_to_Chargen_SwapList {}
+
+#NOP : Keeps track of number of excellent scores
+#VAR _CCharGen_Roller_Excl_Cnt {0}
+
+#NOP : Keeps track of indices corresponding to specific bonus assignment priorities
+
+#VAR _CCharGen_Roller_BonusAddPriority {0}
+#VAR _CCharGen_Roller_BonusAddMaxPriority_K {14}
+#VAR _CCharGen_Roller_BonusAddPriorityIndices
+{
+	{6}{0}
+	{7}{0}
+	{8}{0}
+	{9}{0}
+	{10}{0}
+	{11}{0}
+	{12}{0}
+	{13}{0}
+}
+
+
+#NOP --------------------------------------------------------------------------
+#NOP --------------------------------------------------------------------------
+
+#NOP //////////////////////////////////////////////////////////////////////////
+
+#NOP --------------------------------------------------------------------------
+#NOP - shared data with chargen script
+#NOP --------------------------------------------------------------------------
+
+#VAR _CCharGen_Roller_to_Chargen_RerollFlag {}
+#VAR _CCharGen_Roller_to_Chargen_BonusStatKey {}
+#VAR _CCharGen_Roller_to_Chargen_BonusStatNewScore {}
+#VAR _CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex {}
+#VAR _CCharGen_Roller_to_Chargen_BonusesUsed {}
+
+#NOP --------------------------------------------------------------------------
+#NOP --------------------------------------------------------------------------
+
+
+#VAR _CCharGen_Roller_StatsKeysTable
+{
+	{Str}{s}
+	{Pow}{p}
+	{Dex}{d}
+	{Int}{i}
+	{Agi}{a}
+	{Wis}{w}
+	{Con}{c}
+	{Cha}{h}
+	{Luc}{l}
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Init function to initialize needed data structures.
+#NOP - Called just before roller segment during character generation.
+#NOP -   arg 1 : character race (only needed when using the matrix)
+#NOP -   arg 2 : character class (only needed when using the matrix)
+#NOP --------------------------------------------------------------------------
+#ALIAS {_CCharGen_Roller_AliasFunc_Init}
+{
+	#NOP : load Player specified default heuristics lists;
+	#FOREACH 
+		$_CCHARGEN_ROLLER_CFG_ROLL_ASSIGNMENT_HEURISTICS_DEFAULT[StatsPriorityList][%*]
+			{attrib}
+				{#LIST 
+					{_CCharGen_Roller_Player_StatsPriorityList} 
+						{add} {$attrib}};
+	
+	CCharGen_AliasFunc_LogStatsDemark >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>;
+	      CCharGen_AliasFunc_LogStats PLAYER CONFIGURED LISTS (@INIT):;
+	CCharGen_AliasFunc_LogStatsDemark --------------------------------;
+	CCharGen_AliasFunc_LogStats 1. StatsPriority   : $_CCharGen_Roller_Player_StatsPriorityList;
+	CCharGen_AliasFunc_LogStats 2. Weight required : $_CCHARGEN_ROLLER_CFG_WEIGHT;
+	CCharGen_AliasFunc_LogStatsDemark <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<;
+
+	#VAR {_CCharGen_Roller_RequiredWeights} $_CCHARGEN_ROLLER_CFG_WEIGHT;
+	
+	#NOP : init list to zeroes since zero bonus rolls assigned to each stat at start;
+	#LIST {_CCharGen_Roller_BonusAssignedList} {add}
+		{0} {0} {0} {0} {0} {0} {0} {0} {0};
+		
+	#VAR {_CCharGen_Roller_to_Chargen_BonusesUsed} {0};
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Reset function to reset state due to reroll.
+#NOP --------------------------------------------------------------------------
+#ALIAS {_CCharGen_Roller_AliasFunc_Reset}
+{
+	#VAR {_CCharGen_Roller_RolledWeights} {0};
+	#LIST {_CCharGen_Roller_RolledStatsSortedList} {clear};
+	#LIST {_CCharGen_Roller_RolledSortKeyList} {clear};
+	#LIST {_CCharGen_Roller_BonusAssignedList} {clear};
+	#LIST {_CCharGen_Roller_BonusAssignedList} {add}
+		{0} {0} {0} {0} {0} {0} {0} {0} {0};
+	#VAR {_CCharGen_Roller_to_Chargen_BonusesUsed} {0};
+	#VAR {_CCharGen_Roller_Excl_Cnt} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriority} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriorityIndices[6]} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriorityIndices[7]} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriorityIndices[8]} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriorityIndices[9]} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriorityIndices[10]} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriorityIndices[11]} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriorityIndices[12]} {0};
+	#VAR {_CCharGen_Roller_BonusAddPriorityIndices[13]} {0};
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Store roll & corresponding attribute in sorted order, 
+#NOP - compute accumulated weights.
+#NOP -
+#NOP - arg 1 : Attrib/Stat {Str,Con,Cha,Int,Wis,Agi,Dex,Pow,Luc}
+#NOP - arg 2: numeral min score which can be used as sort key/val
+#NOP --------------------------------------------------------------------------
+#ALIAS {_CCharGen_Roller_AliasFunc_AddRoll}
+{
+	#VAR lIndexToInsert {1};
+	#VAR lListSize {};
+
+	#FOREACH $_CCharGen_Roller_RolledSortKeyList[%*] {lKey}
+	{
+		#IF {%2 > $lKey}
+		{
+			#BREAK;
+		};
+		#MATH {lIndexToInsert} {$lIndexToInsert + 1};
+	};
+
+	#IF {%2 == $_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[VGD]}
+	{
+		#MATH {_CCharGen_Roller_RolledWeights}
+			{$_CCharGen_Roller_RolledWeights + $_CCHARGEN_ROLLER_CFG_SCORE_VGD_WEIGHT_K};
+	};
+	#ELSEIF {%2 == $_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[EXCL]}
+	{
+		#MATH {_CCharGen_Roller_RolledWeights}
+			{$_CCharGen_Roller_RolledWeights + $_CCHARGEN_ROLLER_CFG_SCORE_EXCL_WEIGHT_K};
+
+		#MATH {_CCharGen_Roller_Excl_Cnt} {$_CCharGen_Roller_Excl_Cnt + 1};
+		
+		#IF {$_CCharGen_Roller_BonusAddPriority == 0 ||
+				$_CCharGen_Roller_BonusAddPriority == 13}
+		{
+			#VAR {_CCharGen_Roller_BonusAddPriority} {10};
+			#VAR {_CCharGen_Roller_BonusAddPriorityIndices[10]} {$lIndexToInsert};
+		};
+	};
+	#ELSEIF {%2 == $_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[GD]}
+	{
+		#MATH {_CCharGen_Roller_RolledWeights}
+			{$_CCharGen_Roller_RolledWeights + $_CCHARGEN_ROLLER_CFG_SCORE_GD_WEIGHT_K};
+	};
+	#ELSEIF {%2 == $_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[AAVG]}
+	{
+		#IF {$_CCharGen_Roller_BonusAddPriority == 0}
+		{
+			#VAR {_CCharGen_Roller_BonusAddPriority} {13};
+			#VAR {_CCharGen_Roller_BonusAddPriorityIndices[13]} {$lIndexToInsert};
+		};
+	};
+
+	#IF {$lIndexToInsert <= $_CCharGen_Roller_BonusAddPriorityIndices[13]}
+	{
+		#MATH {_CCharGen_Roller_BonusAddPriorityIndices[13]} {$_CCharGen_Roller_BonusAddPriorityIndices[13] + 1};
+	};
+
+	#LIST {_CCharGen_Roller_RolledSortKeyList} {size} {lListSize};
+
+	#IF {$lIndexToInsert > $lListSize}
+	{
+		#LIST {_CCharGen_Roller_RolledStatsSortedList} {add} {%1};
+		#LIST {_CCharGen_Roller_RolledSortKeyList} {add} {%2};
+	};
+	#ELSE
+	{
+		#LIST {_CCharGen_Roller_RolledStatsSortedList} {insert} {$lIndexToInsert} {%1};
+		#LIST {_CCharGen_Roller_RolledSortKeyList} {insert} {$lIndexToInsert} {%2};
+	};
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Evaluate the rolls to check whether there is a need to reroll
+#NOP - Pass the result back to chargen to send to mud
+#NOP --------------------------------------------------------------------------
+#ALIAS {_CCharGen_Roller_AliasFunc_EvaluateRolls}
+{
+	CCharGen_AliasFunc_LogStatsDemark > > > > > > > > > > > > > > >;
+	      CCharGen_AliasFunc_LogStats Sorted Rolled Lists (Pre Bonus):;
+	CCharGen_AliasFunc_LogStatsDemark --------------------------------;
+	CCharGen_AliasFunc_LogStats 1. RolledStatsPriority : $_CCharGen_Roller_RolledStatsSortedList;
+	CCharGen_AliasFunc_LogStats 2. RolledScore         : $_CCharGen_Roller_RolledSortKeyList;
+	CCharGen_AliasFunc_LogStatsDemark < < < < < < < < < < < < < < <;
+
+	#NOP : check whether we need to reroll;
+	#IF {$_CCharGen_Roller_RolledWeights < $_CCharGen_Roller_RequiredWeights}
+	{
+		CCharGen_AliasFunc_LogStats Rolled Wts ($_CCharGen_Roller_RolledWeights) < Required Wts($_CCharGen_Roller_RequiredWeights) -> reroll;
+		#VAR {_CCharGen_Roller_to_Chargen_RerollFlag} {1};
+	};
+	#ELSE
+	{
+		CCharGen_AliasFunc_LogStats Rolled Wts ($_CCharGen_Roller_RolledWeights) >= Required Wts($_CCharGen_Roller_RequiredWeights) -> accept;	
+		#VAR {_CCharGen_Roller_to_Chargen_RerollFlag} {0};
+	};
+	
+	CCharGen_AliasFunc_LogStatsDemark &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&;
+}
+
+#NOP : _CCharGen_Roller_AliasFunc_AddBonus routine automatically assigns the 
+#NOP : bonuses as smartly as it can, and tries to avoid wasting bonuses unless left with no choice
+#NOP : Bonus assignment auto-prioritization takes place in the following manner:
+#NOP : Priority  1 : satisfy Num of Excl = $_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC (1-4)
+#NOP : Priority  2 : create 'definite' strong Excls from rolled V.Gds 
+#NOP :              -> ie. all Excl of min score = 92 and already have 1 bonus (ie. this was originally a V.Gd>=87)
+#NOP :              => this will give final Excl of min score = 97 (max. 1 pt. wastage from 2 bonus rolls)
+#NOP :              => this means that setting a lower _CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC will
+#NOP :                 give better possibility of having strong Excl scores in high priority attributes
+#NOP : Priority  3 : bump remaining V.Gds to Excls
+#NOP : Priority  4 : bump rolled Gds to Excls if possible
+#NOP : Priority  5 : N/A
+#NOP : If we still have bonuses at this point, we are only left with Excls (only below combis possible) & below Gds
+#NOP : Priority  6 : Excl at score 92 with 2 bonuses (from Gd>=82) => gives 97-100 for 3 bonuses with 0 wastage
+#NOP : Priority  7 : Excl at score 95 with 3 bonuses (from Gd=80) => gives perfect 100 for 4 bonuses with 0 wastage
+#NOP : Priority  8 : Excl at score 96 with 2 bonuses (from V.Gd=86, max. 1 pt. wastage from 3 bonus rolls)
+#NOP : Priority  9 : Excl at score 96 with 3 bonuses (from Gd=81, max. 1 pt. wastage for 4 bonus rolls)
+#NOP : Priority 10 : Excl at score 92 with 0 bonuses (natural Excl) => gives 97-100 for 1 bonus with max. 5 pts. wastage
+#NOP : Priority 11 : Excl at score 97 with 2 bonuses (from V.Gd>=87, created from priority 2) => gives perfect 100 for 3 bonuses with max. 5 pts. wastage
+#NOP : Priority 12 : Excl at score 97 with 1 bonuses (from natural Excl) => gives perfect 100 for 3 bonuses with max. 5 pts. wastage
+#NOP : Priority 13 : Below good (starting from above average first due to sort order maintained) => due to final bump, gives 80-84 with max. 5 pts. of wastage
+#NOP : Last case (all excellents) just assign to current index;
+#ALIAS {_CCharGen_Roller_AliasFunc_AddBonus}
+{
+	#VAR lIndexOfUpdatedValue {};
+	#VAR lNextLoopIter {};
+	
+	#MATH lBonusesLeft {$_CCHARGEN_ROLLER_CFG_NUM_OF_BONUS_ROLLS_K - $_CCharGen_Roller_to_Chargen_BonusesUsed};
+
+	#NOP : Priority  1;
+	#IF {$_CCharGen_Roller_Excl_Cnt < $_CCHARGEN_ROLLER_CFG_VGD_TO_EXCL_TARGET_HEURISTIC}
+	{
+		#MATH {lIndexOfUpdatedValue} {$_CCharGen_Roller_Excl_Cnt + 1};
+		#IF {$_CCharGen_Roller_RolledSortKeyList[$lIndexOfUpdatedValue] < 
+				$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[VGD]}
+		{
+			#VAR lIndexOfUpdatedValue {};
+		};
+	};
+	
+	#IF {"$lIndexOfUpdatedValue" == ""}
+	{
+		#NOP : Priority  2;
+		#LOOP {1} {$_CCharGen_Roller_Excl_Cnt} {lLoopIter}
+		{
+			#IF {$_CCharGen_Roller_RolledSortKeyList[$lLoopIter] == 92 &&
+					$_CCharGen_Roller_BonusAssignedList[$lLoopIter] == 1}
+			{
+				#VAR {lIndexOfUpdatedValue} {$lLoopIter};
+				#BREAK;
+			};
+		};
+
+		#NOP : Priority  3/4/5 (combined);
+		#IF {"$lIndexOfUpdatedValue" == ""}
+		{
+			#IF {$_CCharGen_Roller_Excl_Cnt < 9}
+			{
+				#MATH {lIndexOfUpdatedValue} {$_CCharGen_Roller_Excl_Cnt + 1};
+				#IF {$_CCharGen_Roller_RolledSortKeyList[$lIndexOfUpdatedValue] < 
+						$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[GD]}
+				{
+					#NOP : if first bonus, either priority 10 or 13 or already all excellents;
+					#NOP : otherwise highest priority assigned during resort;
+					#IF {$_CCharGen_Roller_BonusAddPriority > 5 && 
+							$_CCharGen_Roller_BonusAddPriority < $_CCharGen_Roller_BonusAddMaxPriority_K}
+					{
+						#VAR {lIndexOfUpdatedValue} 
+								{$_CCharGen_Roller_BonusAddPriorityIndices[$_CCharGen_Roller_BonusAddPriority]};
+								
+					};
+					#NOP : ELSE already don't care, keep it as it is;
+				};
+			};
+		};
+	};
+
+	#VAR lOldVal {$_CCharGen_Roller_RolledSortKeyList[$lIndexOfUpdatedValue]};
+	
+	#MATH {_CCharGen_Roller_RolledSortKeyList[$lIndexOfUpdatedValue]} 
+			{$_CCharGen_Roller_RolledSortKeyList[$lIndexOfUpdatedValue] + $_CCHARGEN_ROLLER_CFG_BONUSROLL_VAL_K};
+
+	#IF {$lOldVal < $_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[EXCL] &&
+			$_CCharGen_Roller_RolledSortKeyList[$lIndexOfUpdatedValue] >= 
+				$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[EXCL]}
+	{
+		#MATH {_CCharGen_Roller_Excl_Cnt} {$_CCharGen_Roller_Excl_Cnt + 1};
+	};
+	
+	#MATH {_CCharGen_Roller_BonusAssignedList[$lIndexOfUpdatedValue]}
+			{$_CCharGen_Roller_BonusAssignedList[$lIndexOfUpdatedValue] + 1};
+	
+	#VAR {_CCharGen_Roller_to_Chargen_BonusStatKey}
+		{$_CCharGen_Roller_StatsKeysTable[$_CCharGen_Roller_RolledStatsSortedList[$lIndexOfUpdatedValue]]};
+					
+	#VAR {_CCharGen_Roller_to_Chargen_BonusStatNewScore} 
+			{$_CCharGen_Roller_RolledSortKeyList[$lIndexOfUpdatedValue]};
+			
+	#VAR {_CCharGen_Roller_to_Chargen_BonusStatUpdatedIndex} {$lIndexOfUpdatedValue};
+
+	#MATH {_CCharGen_Roller_to_Chargen_BonusesUsed} {$_CCharGen_Roller_to_Chargen_BonusesUsed + 1};
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Resort rolled lists using simple sort to maintain sort integrity
+#NOP - This routine should be called each time a value has been updated.
+#NOP -
+#NOP - arg 1 : index into lists where value has been changed
+#NOP - Value changes can only be +ve, so we will always be moving a value up the 
+#NOP - list
+#NOP -
+#NOP - arg 2 : flag to indicate update adjustment of V.Good min to Excellent min
+#NOP -         this is invoked when the original value of stat at the index(arg1)
+#NOP -         was V.Good and after bonus roll, scanned by the chargen script to 
+#NOP -         to have changed to Excellent (ie. original V.Good was 87-91)
+#NOP -   {0} : -> false and no adjustment needed
+#NOP -   {1} : -> true and adjustment needed
+#NOP -
+#NOP --------------------------------------------------------------------------
+#ALIAS {_CCharGen_Roller_AliasFunc_ResortRolledLists}
+{
+	#VAR lSwapVal {};
+	#VAR lNextLoopIter {};
+	
+	#NOP : first check for adjustment;
+	#IF {%2 == 1}
+	{
+		#VAR lOldVal {$_CCharGen_Roller_RolledSortKeyList[%1]};
+		#MATH {_CCharGen_Roller_RolledSortKeyList[%1]}
+					{$_CCharGen_Roller_RolledSortKeyList[%1] + 1};
+					
+		#IF {$lOldVal < $_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[EXCL] &&
+				$_CCharGen_Roller_RolledSortKeyList[%1] >= 
+					$_CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE[EXCL]}
+		{
+			#MATH {_CCharGen_Roller_Excl_Cnt} {$_CCharGen_Roller_Excl_Cnt + 1};
+		};
+	};
+	
+	#NOP : perform simple sort on rolled lists;
+	#LOOP {%1} {1} {lLoopIter}
+	{
+		#IF {$lLoopIter != 1}
+		{
+			#MATH {lNextLoopIter} {$lLoopIter - 1};
+			#IF {$_CCharGen_Roller_RolledSortKeyList[$lLoopIter] >
+					$_CCharGen_Roller_RolledSortKeyList[$lNextLoopIter]}
+			{
+				#NOP : swap to move up a larger value;
+				#VAR {lSwapVal} {$_CCharGen_Roller_RolledSortKeyList[$lNextLoopIter]};
+				#VAR {_CCharGen_Roller_RolledSortKeyList[$lNextLoopIter]}
+						{$_CCharGen_Roller_RolledSortKeyList[$lLoopIter]};
+				#VAR {_CCharGen_Roller_RolledSortKeyList[$lLoopIter]}
+						{$lSwapVal};
+						
+				#VAR {lSwapVal} {$_CCharGen_Roller_RolledStatsSortedList[$lNextLoopIter]};
+				#VAR {_CCharGen_Roller_RolledStatsSortedList[$lNextLoopIter]}
+						{$_CCharGen_Roller_RolledStatsSortedList[$lLoopIter]};
+				#VAR {_CCharGen_Roller_RolledStatsSortedList[$lLoopIter]}
+						{$lSwapVal};
+						
+				#VAR {lSwapVal} {$_CCharGen_Roller_BonusAssignedList[$lNextLoopIter]};
+				#VAR {_CCharGen_Roller_BonusAssignedList[$lNextLoopIter]}
+						{$_CCharGen_Roller_BonusAssignedList[$lLoopIter]};
+				#VAR {_CCharGen_Roller_BonusAssignedList[$lLoopIter]}
+						{$lSwapVal};
+			};
+		};
+	};
+
+	#NOP : priority determination (for more than 5);
+	#VAR {_CCharGen_Roller_BonusAddPriority} {$_CCharGen_Roller_BonusAddMaxPriority_K};
+	#LOOP {1} {9} {lLoopIter}
+	{
+		#IF {$_CCharGen_Roller_RolledSortKeyList[$lLoopIter] == 97}
+		{
+			#IF {$_CCharGen_Roller_BonusAssignedList[$lLoopIter] == 1 &&
+					$_CCharGen_Roller_BonusAddPriority > 12}
+			{
+				#VAR {_CCharGen_Roller_BonusAddPriority} {12};
+				#VAR {_CCharGen_Roller_BonusAddPriorityIndices[12]} {$lLoopIter};
+			};
+			#ELSEIF {$_CCharGen_Roller_BonusAssignedList[$lLoopIter] == 2 &&
+						$_CCharGen_Roller_BonusAddPriority > 11}
+			{
+				#VAR {_CCharGen_Roller_BonusAddPriority} {11};
+				#VAR {_CCharGen_Roller_BonusAddPriorityIndices[11]} {$lLoopIter};
+			};
+		};
+		#ELSEIF {$_CCharGen_Roller_RolledSortKeyList[$lLoopIter] == 96}
+		{
+			#IF {$_CCharGen_Roller_BonusAssignedList[$lLoopIter] == 3 &&
+					$_CCharGen_Roller_BonusAddPriority > 9}
+			{
+				#VAR {_CCharGen_Roller_BonusAddPriority} {9};
+				#VAR {_CCharGen_Roller_BonusAddPriorityIndices[9]} {$lLoopIter};
+			};
+			#ELSEIF {$_CCharGen_Roller_BonusAssignedList[$lLoopIter] == 2 &&
+						$_CCharGen_Roller_BonusAddPriority > 8}
+			{
+				#VAR {_CCharGen_Roller_BonusAddPriority} {8};
+				#VAR {_CCharGen_Roller_BonusAddPriorityIndices[8]} {$lLoopIter};
+			};
+		};
+		#ELSEIF {$_CCharGen_Roller_RolledSortKeyList[$lLoopIter] == 95}
+		{
+			#IF {$_CCharGen_Roller_BonusAssignedList[$lLoopIter] == 3 &&
+					$_CCharGen_Roller_BonusAddPriority > 7}
+			{
+				#VAR {_CCharGen_Roller_BonusAddPriority} {7};
+				#VAR {_CCharGen_Roller_BonusAddPriorityIndices[7]} {$lLoopIter};
+			};
+		};
+		#ELSEIF {$_CCharGen_Roller_RolledSortKeyList[$lLoopIter] == 92}
+		{
+			#IF {$_CCharGen_Roller_BonusAssignedList[$lLoopIter] == 0 &&
+					$_CCharGen_Roller_BonusAddPriority > 10}
+			{
+				#VAR {_CCharGen_Roller_BonusAddPriority} {10};
+				#VAR {_CCharGen_Roller_BonusAddPriorityIndices[10]} {$lLoopIter};
+			};
+			#ELSEIF {$_CCharGen_Roller_BonusAssignedList[$lLoopIter] == 2 &&
+						$_CCharGen_Roller_BonusAddPriority > 6}
+			{
+				#VAR {_CCharGen_Roller_BonusAddPriority} {6};
+				#VAR {_CCharGen_Roller_BonusAddPriorityIndices[6]} {$lLoopIter};
+			};
+		};
+	};
+
+	CCharGen_AliasFunc_LogStatsDemark > > > > > > > > > > > > > > >;
+	      CCharGen_AliasFunc_LogStats Sorted Rolled Lists (After Bonus $_CCharGen_Roller_to_Chargen_BonusesUsed):;
+	CCharGen_AliasFunc_LogStatsDemark ------------------------------------;
+	CCharGen_AliasFunc_LogStats 1. RolledStatsPriority : $_CCharGen_Roller_RolledStatsSortedList;
+	CCharGen_AliasFunc_LogStats 2. RolledScore         : $_CCharGen_Roller_RolledSortKeyList;
+	CCharGen_AliasFunc_LogStats 3. BonusAssignedList   : $_CCharGen_Roller_BonusAssignedList;
+	CCharGen_AliasFunc_LogStatsDemark < < < < < < < < < < < < < < <;
+}
+
+#ALIAS {_CCharGen_Roller_AliasFunc_GenerateSwapList}
+{
+	#VAR lSendStr {};
+	#VAR lIndexTmp {};
+	#VAR lValueTmp {};
+	
+	CCharGen_AliasFunc_LogStatsDemark > > > > > > > > > > > > > > >;
+	      CCharGen_AliasFunc_LogStats Sorted Rolled Lists (Post Bonus):;
+	CCharGen_AliasFunc_LogStatsDemark ---------------------------------;
+	CCharGen_AliasFunc_LogStats 1. RolledStatsPriority : $_CCharGen_Roller_RolledStatsSortedList;
+	CCharGen_AliasFunc_LogStats 2. RolledScore         : $_CCharGen_Roller_RolledSortKeyList;
+	CCharGen_AliasFunc_LogStats 3. RolledBonusAssign   : $_CCharGen_Roller_BonusAssignedList;
+	CCharGen_AliasFunc_LogStatsDemark < < < < < < < < < < < < < < <;
+	
+	#LOOP {1} {9} {lLoopIter}
+	{
+		#IF {"$_CCharGen_Roller_Player_StatsPriorityList[$lLoopIter]" !=
+				"$_CCharGen_Roller_RolledStatsSortedList[$lLoopIter]"}
+		{
+			#VAR {lSendStr} {$_CCharGen_Roller_StatsKeysTable[$_CCharGen_Roller_Player_StatsPriorityList[$lLoopIter]] $_CCharGen_Roller_StatsKeysTable[$_CCharGen_Roller_RolledStatsSortedList[$lLoopIter]]};
+			#LIST {_CCharGen_Roller_to_Chargen_SwapList} {add}
+				{$lSendStr};
+				
+			#LIST {_CCharGen_Roller_RolledStatsSortedList} {find} 
+				{$_CCharGen_Roller_Player_StatsPriorityList[$lLoopIter]} {lIndexTmp};
+				
+			#VAR {lValueTmp} {$_CCharGen_Roller_RolledStatsSortedList[$lLoopIter]};
+			#VAR {_CCharGen_Roller_RolledStatsSortedList[$lLoopIter]} 
+					{$_CCharGen_Roller_RolledStatsSortedList[$lIndexTmp]};
+			#VAR {_CCharGen_Roller_RolledStatsSortedList[$lIndexTmp]} {$lValueTmp};
+		};
+	};
+
+	CCharGen_AliasFunc_LogStatsDemark >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>;
+	 CCharGen_AliasFunc_LogStats <170>PLAYER CONFIGURED LISTS (@END):;
+	CCharGen_AliasFunc_LogStatsDemark -------------------------------;
+	CCharGen_AliasFunc_LogStats 1. StatsPriority   : <070>$_CCharGen_Roller_Player_StatsPriorityList;
+	CCharGen_AliasFunc_LogStats 2. Weight required : <070>$_CCHARGEN_ROLLER_CFG_WEIGHT;
+	CCharGen_AliasFunc_LogStatsDemark <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<;
+	CCharGen_AliasFunc_LogStatsDemark > > > > > > > > > > > > > > >;
+	 CCharGen_AliasFunc_LogStats <170>Sorted Rolled Lists (Post Swap):;
+	CCharGen_AliasFunc_LogStatsDemark --------------------------------;
+	CCharGen_AliasFunc_LogStats 1. RolledStatsPriority : <070>$_CCharGen_Roller_RolledStatsSortedList;
+	CCharGen_AliasFunc_LogStats 2. RolledScore         : <070>$_CCharGen_Roller_RolledSortKeyList;
+	CCharGen_AliasFunc_LogStatsDemark < < < < < < < < < < < < < < <;
+	
+	#UNVAR lSendStr;
+	#UNVAR lIndexTmp;
+	#UNVAR lValueTmp;
+}

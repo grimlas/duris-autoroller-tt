@@ -1,0 +1,64 @@
+#NOP VSOF;
+
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#NOP
+#NOP                       R O L L E R   C O N F I G
+#NOP                       -------------------------
+#NOP
+#NOP    - configuration file that is fairly fixed (no modifications expected
+#NOP      unless game changes.
+#NOP
+#NOP >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#NOP --------------------------------------------------------------------------
+#NOP - Minimum value for each score range
+#NOP --------------------------------------------------------------------------
+#VAR _CCHARGEN_ROLLER_CFG_SCORE_MIN_VAL_K_TABLE
+{
+	{LAME}{1}
+	{POOR}{10}
+	{BAVG}{22}
+	{AVG}{34}
+	{AAVG}{68}
+	{GD}{80}
+	{VGD}{86}
+	{EXCL}{92}
+}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Score added by a bonus roll
+#NOP --------------------------------------------------------------------------
+#VAR _CCHARGEN_ROLLER_CFG_BONUSROLL_VAL_K {5}
+
+#NOP --------------------------------------------------------------------------
+#NOP - Number of bonus rolls granted
+#NOP --------------------------------------------------------------------------
+#VAR _CCHARGEN_ROLLER_CFG_NUM_OF_BONUS_ROLLS_K {4}
+
+#READ _chargen-roller-cfg-user.tin
+#NOP - NOT USED /// #READ _chargen-roller-cfg-user-matrix.tin
+
+#VAR _CCHARGEN_ROLLER_CFG_MINSCORE_VAL_TABLE
+{
+	{P}{100}
+	{E}{96}
+	{H}{91}
+	{M}{86}
+	{X}{80}
+}
+
+#VAR _CCHARGEN_ROLLER_CFG_SCORE_EXCL_WEIGHT_K {5}
+#VAR _CCHARGEN_ROLLER_CFG_SCORE_VGD_WEIGHT_K {3}
+#VAR _CCHARGEN_ROLLER_CFG_SCORE_GD_WEIGHT_K {1}
+
+#VAR _CCHARGEN_ROLLER_CFG_STR_BIT {1}
+#VAR _CCHARGEN_ROLLER_CFG_POW_BIT {2}
+#VAR _CCHARGEN_ROLLER_CFG_DEX_BIT {4}
+#VAR _CCHARGEN_ROLLER_CFG_INT_BIT {8}
+#VAR _CCHARGEN_ROLLER_CFG_AGI_BIT {16}
+#VAR _CCHARGEN_ROLLER_CFG_WIS_BIT {32}
+#VAR _CCHARGEN_ROLLER_CFG_CON_BIT {128}
+#VAR _CCHARGEN_ROLLER_CFG_CHA_BIT {256}
+#VAR _CCHARGEN_ROLLER_CFG_LUC_BIT {512}
+
+
